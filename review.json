@@ -1,0 +1,54 @@
+{
+  "verdict": "pass",
+  "score": 5,
+  "summary": "A real but mild pain with a buildable $0 CLI, but demand is blog posts only, it is a free tool with no path to revenue, and it depends on a vendor-owned log format that Anthropic or Entire could replace. Not worth a demand-test slot.",
+  "forcingQuestions": {
+    "demand": {
+      "score": 3,
+      "evidence": "One blog post, one vendor guide and a feature-request issue; no user behavior, payments or requests. RESEARCH.md admits it is unverified how many run agents unattended."
+    },
+    "statusQuo": {
+      "score": 5,
+      "evidence": "git log, /resume and manual transcript reading; some users write their own JSONL parsers. Hook-based Entire and Semantica leave a retroactive zero-install gap."
+    },
+    "specificity": {
+      "score": 4,
+      "evidence": "Persona is a profile (solo dev running Claude Code overnight), not a named person. The consequence is a slower morning, not a career or revenue cost."
+    },
+    "wedge": {
+      "score": 6,
+      "evidence": "One npx command listing per-branch FAILED/retries/risky files, no setup. But it is a free OSS CLI with nothing to sell; the success metric is stars."
+    },
+    "futureFit": {
+      "score": 4,
+      "evidence": "More unattended runs raise the need, but the tool depends on an undocumented vendor JSONL schema and the platform owner or Entire can build the same view."
+    }
+  },
+  "premises": [
+    "Developers run agents unattended often enough to need triage (weakly supported by blogs only)",
+    "Heuristic receipts (exit codes, retries, risky paths) are trusted enough to act on",
+    "The Claude Code JSONL schema is stable enough to parse (unsupported)",
+    "Retroactive zero-install beats hook-based tracing (partly supported)",
+    "Someone will adopt or pay for a local CLI (not supported)"
+  ],
+  "alternatives": [
+    "Minimal: a shell script or Claude Code skill for personal use, no demand test",
+    "Extend RepoHQ with a last-night's-agent-runs panel, reusing David's stack and sharing log reading with pr-receipt",
+    "Ideal: ingest Entire/Semantica checkpoints as primary input with JSONL fallback (larger than a weekend)"
+  ],
+  "wedge": "npx dawnlog --since 12h on one repo, Claude Code only: one line per branch with matched session, FAILED/OK, retry count and a lockfile/migration/auth risk flag.",
+  "feasibility": {
+    "m1Weekend": true,
+    "zeroCost": true,
+    "notes": "Node CLI, hand-rolled JSONL parser, git subprocess, regex redaction, Vitest fixtures; local-only, npm publish is free. Proof test: at least 9 of 10 of David's real overnight sessions attribute to the right branch. Expect parser fixes with each Claude Code release."
+  },
+  "risks": [
+    "JSONL schema drift breaks the parser",
+    "Anthropic or Entire/Semantica ship a morning view",
+    "False-confidence heuristic receipts",
+    "Secret leakage past best-effort redaction",
+    "No monetization path for a free CLI",
+    "Overlaps the passed pr-receipt idea"
+  ],
+  "killCriteria": "Drop if the 2-week test gets under 50 visitors or under 5 signups, if no reader says they already parse session logs by hand, if Anthropic or Entire ship a morning view, or if attribution is under 90% on David's own runs."
+}

@@ -1,0 +1,23 @@
+{
+  "title": "dawnlog — morning triage receipts for overnight AI agent runs",
+  "repoName": "dawnlog",
+  "oneLiner": "For developers who let Claude Code run unattended, it reads the session logs already on disk plus git branches and prints a per-branch receipt of what the agent decided, retried, skipped and verified, ranked for merge/fix/kill.",
+  "overlaps": "AI-Took-My-Job (feedback loop for agents to code repos) and the passed pr-receipt idea (cost per PR) — dawnlog is retroactive behavior triage, not cost or feedback loops; external: Entire CLI and Semantica (hook-based provenance)",
+  "tags": [
+    "dev-tools",
+    "ai"
+  ],
+  "effort": "Low",
+  "confidence": "Medium",
+  "sources": [
+    "https://tianpan.co/blog/2026-07-02-the-morning-review-queue",
+    "https://www.verdent.ai/guides/overnight-ai-coding-agent-safety-checks",
+    "https://claudeissues.com/issue/49095-global-session-history-view-across-all-projects",
+    "https://www.thoughtworks.com/radar/tools/entire-cli",
+    "https://pkg.go.dev/github.com/semanticash/cli@v0.4.0",
+    "https://constellationnetwork.io/blog/openclaw-audit-trail/",
+    "https://claudecowork.im/resources/git-catchup"
+  ],
+  "slug": "dawnlog",
+  "recordedAt": "2026-10-10T19:17:38.533Z"
+}
