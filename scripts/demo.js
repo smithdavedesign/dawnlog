@@ -22,7 +22,8 @@ try {
     cwd: repo,
     gitBranch: 'fix-login',
     start: now - 9 * HOUR,
-    prompt: 'Fix the login redirect loop. Token for the staging API: sk-ant-api03-DEMOdemoDEMOdemo1234',
+    // A fake key, built at runtime so no credential-shaped string is in the source.
+    prompt: `Fix the login redirect loop. Token for the staging API: ${['sk', 'ant', 'api03', 'A1b2C3d4'.repeat(6)].join('-')}`,
     bash: [
       { command: 'npm test', exit: 1 },
       { command: 'npm test', exit: 1 },

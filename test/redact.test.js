@@ -2,22 +2,11 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { REDACTED, clean, redact, sanitize } from '../src/redact.js';
+import { FAKE, FAKE_API_KEY_JSON, FAKE_BEARER, FAKE_PASSWORD_ASSIGNMENT, FAKE_PRIVATE_KEY, FAKE_TRUNCATED_KEY } from './fake-secrets.js';
 
 // Seeded corpus: one sample per format (the PRD metric asks for 0 leaks across 10+ formats).
-const SECRETS = {
-  anthropic: 'sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_abcdEFGH',
-  openai: 'sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789',
-  'github classic': 'ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8',
-  'github oauth': 'gho_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8',
-  'github fine-grained': 'github_pat_11ABCDEFG0123456789_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOP',
-  'aws access key id': 'AKIAIOSFODNN7EXAMPLE',
-  'aws session key id': 'ASIAIOSFODNN7EXAMPLE',
-  slack: 'xoxb-1234567890-0987654321-AbCdEfGhIjKlMnOp',
-  stripe: 'sk_live_51HAbCdEfGhIjKlMnOpQrStUv',
-  google: 'AIzaSyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q',
-  npm: 'npm_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8',
-  jwt: 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U',
-};
+// Seeded corpus from test/fake-secrets.js: built at runtime, never real.
+const SECRETS = FAKE;
 
 describe('redact', () => {
   for (const [name, secret] of Object.entries(SECRETS)) {
@@ -35,19 +24,19 @@ describe('redact', () => {
   });
 
   test('Bearer tokens', () => {
-    assert.equal(redact('Authorization: Bearer abcdefghijklmnop1234567890'), `Authorization: Bearer ${REDACTED}`);
+    assert.equal(redact(`Authorization: ${FAKE_BEARER}`), `Authorization: Bearer ${REDACTED}`);
   });
 
   test('secret-looking assignments', () => {
-    assert.equal(redact('DB_PASSWORD=hunter2hunter2 next'), `DB_PASSWORD=${REDACTED} next`);
-    assert.equal(redact('"api_key": "abcd1234efgh5678"'), `"api_key": "${REDACTED}"`);
+    assert.equal(redact(`${FAKE_PASSWORD_ASSIGNMENT} next`), `DB_PASSWORD=${REDACTED} next`);
+    assert.equal(redact(FAKE_API_KEY_JSON), `"api_key": "${REDACTED}"`);
     assert.equal(redact('token: short'), 'token: short', 'short values are left alone');
   });
 
   test('private key blocks, including one cut off before its END line', () => {
-    const key = '-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA1b2c3\nd4e5f6\n-----END RSA PRIVATE KEY-----';
+    const key = FAKE_PRIVATE_KEY;
     assert.equal(redact(`key:\n${key}\nafter`), `key:\n${REDACTED}\nafter`);
-    assert.equal(redact('-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA'), REDACTED);
+    assert.equal(redact(FAKE_TRUNCATED_KEY), REDACTED);
   });
 
   test('is idempotent and leaves ordinary text alone', () => {

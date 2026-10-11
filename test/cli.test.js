@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { HOUR, MIN, cleanup, makeHome, makeRepo, receiptBlocks, runCli, tmpDir, unmatchedSection, writeSession } from './helpers.js';
+import { FAKE } from './fake-secrets.js';
 
 after(cleanup);
 
@@ -133,9 +134,9 @@ describe('M1 fixture: 3 sessions, 3 branches', () => {
 });
 
 describe('exit 5: secret redaction', () => {
-  const ANTHROPIC = 'sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_abcdEFGH';
-  const GITHUB = 'ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8';
-  const AWS = 'AKIAIOSFODNN7EXAMPLE';
+  const ANTHROPIC = FAKE.anthropic;
+  const GITHUB = FAKE['github classic'];
+  const AWS = FAKE['aws access key id'];
   let out;
   let markdown;
 
