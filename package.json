@@ -1,0 +1,27 @@
+{
+  "name": "dawnlog",
+  "version": "0.1.0",
+  "description": "Morning triage receipts for overnight Claude Code runs: one receipt per git branch, built from the session logs already on disk.",
+  "type": "module",
+  "bin": {
+    "dawnlog": "bin/dawnlog.js"
+  },
+  "files": [
+    "bin",
+    "src"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "demo": "node scripts/demo.js"
+  },
+  "keywords": [
+    "claude-code",
+    "ai-agents",
+    "git",
+    "cli",
+    "triage"
+  ]
+}
