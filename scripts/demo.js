@@ -1,4 +1,4 @@
-// `npm run demo`: builds a throwaway repo + fake ~/.claude in a temp dir, runs dawnlog on it,
+// `npm run demo`: builds a throwaway repo + fake ~/.claude in a temp dir, runs overnight-receipts on it,
 // prints the terminal and Markdown receipts and a digest, then deletes everything. Touches nothing of yours.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -34,13 +34,13 @@ try {
   writeSession(projects, { id: 'bbbb2222-0000-4000-8000-000000000002', cwd: repo, gitBranch: 'add-search', start: now - 5 * HOUR, prompt: 'Add a search endpoint', bash: [{ command: 'npm test 2>&1 | tail -20', exit: 0 }] });
   writeSession(projects, { id: 'cccc3333-0000-4000-8000-000000000003', cwd: repo, start: now - 3 * HOUR, prompt: 'Create the users table migration' });
   writeSession(projects, { id: 'dddd4444-0000-4000-8000-000000000004', cwd: repo, gitBranch: 'spike-cache', start: now - 2 * HOUR, prompt: 'Try a caching spike' });
-  const outFile = path.join(tmpDir('demo-out'), 'dawnlog.md');
+  const outFile = path.join(tmpDir('demo-out'), 'overnight-receipts.md');
   const { code, stdout, stderr } = runCli(['--since', '24h', '--repo', repo, '--out', outFile], { home });
-  process.stdout.write(`$ dawnlog --since 24h --out dawnlog.md   (exit ${code})\n\n${stdout}${stderr}`);
-  process.stdout.write(`\n----- dawnlog.md -----\n\n${fs.readFileSync(outFile, 'utf8')}`);
+  process.stdout.write(`$ overnight-receipts --since 24h --out overnight-receipts.md   (exit ${code})\n\n${stdout}${stderr}`);
+  process.stdout.write(`\n----- overnight-receipts.md -----\n\n${fs.readFileSync(outFile, 'utf8')}`);
   const digestFile = path.join(tmpDir('demo-out'), 'digest.txt');
   const digest = runCli(['digest', '--since', '24h', '--repo', repo, '--out', digestFile], { home });
-  process.stdout.write(`\n----- dawnlog digest --out digest.txt (exit ${digest.code}) -----\n\n${fs.readFileSync(digestFile, 'utf8')}`);
+  process.stdout.write(`\n----- overnight-receipts digest --out digest.txt (exit ${digest.code}) -----\n\n${fs.readFileSync(digestFile, 'utf8')}`);
 } finally {
   cleanup();
 }

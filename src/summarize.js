@@ -1,8 +1,8 @@
 // --summarize: a two-sentence summary per receipt from the user's own `claude -p`.
 //
-// The only network-reaching code in dawnlog, and it only runs with --summarize. What goes to the
+// The only network-reaching code in overnight-receipts, and it only runs with --summarize. What goes to the
 // model is the receipt's facts and the agent's final message, both through clean() first, so
-// redacted secrets stay redacted. claude runs with no tools, no session file written (so dawnlog
+// redacted secrets stay redacted. claude runs with no tools, no session file written (so overnight-receipts
 // never reads its own summaries back as sessions) and in a temp directory, so no CLAUDE.md loads.
 // It uses whatever auth `claude` has: a Claude subscription login costs nothing extra; an
 // ANTHROPIC_API_KEY in the environment is billed per call.
@@ -28,7 +28,7 @@ export function promptFor(receipt) {
     INSTRUCTIONS,
     '',
     `Branch: ${receipt.branch}`,
-    `Status: ${receipt.status} (dawnlog suggests ${receipt.suggestion.action}: ${receipt.suggestion.reason})`,
+    `Status: ${receipt.status} (overnight-receipts suggests ${receipt.suggestion.action}: ${receipt.suggestion.reason})`,
     `Task: ${receipt.task || '(no prompt found)'}`,
     `Last test: ${test}`,
     `Retries: ${receipt.retries}`,
@@ -46,9 +46,9 @@ export function promptFor(receipt) {
 
 /** Runs `claude -p` with the prompt on stdin. @returns {{ text: string } | { error: string }} */
 export function runClaude(prompt, env = process.env) {
-  const bin = env.DAWNLOG_CLAUDE || 'claude';
+  const bin = env.OVERNIGHT_RECEIPTS_CLAUDE || 'claude';
   const result = spawnSync(bin, CLAUDE_ARGS, { input: prompt, encoding: 'utf8', timeout: TIMEOUT_MS, cwd: os.tmpdir(), env, maxBuffer: 16 * 1024 * 1024 });
-  if (result.error?.code === 'ENOENT') return { error: `${bin} not found on PATH (install Claude Code or set DAWNLOG_CLAUDE)` };
+  if (result.error?.code === 'ENOENT') return { error: `${bin} not found on PATH (install Claude Code or set OVERNIGHT_RECEIPTS_CLAUDE)` };
   if (result.error?.code === 'ETIMEDOUT') return { error: `${bin} timed out after ${TIMEOUT_MS / 1000}s` };
   if (result.error) return { error: `${bin} failed: ${result.error.message}` };
   if (result.status !== 0) return { error: `${bin} exited ${result.status}: ${String(result.stderr || result.stdout).trim().split('\n')[0]}` };

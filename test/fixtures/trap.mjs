@@ -1,5 +1,5 @@
 // Loaded with `node --import` in front of the CLI: records every subprocess and network attempt to
-// $DAWNLOG_TRAP_LOG (one JSON line each), so a test can assert what dawnlog reached for.
+// $OVERNIGHT_RECEIPTS_TRAP_LOG (one JSON line each), so a test can assert what overnight-receipts reached for.
 // Builtins are patched on their module objects, then synced into ESM named imports.
 import childProcess from 'node:child_process';
 import dns from 'node:dns';
@@ -10,7 +10,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import net from 'node:net';
 import tls from 'node:tls';
 
-const log = process.env.DAWNLOG_TRAP_LOG;
+const log = process.env.OVERNIGHT_RECEIPTS_TRAP_LOG;
 const record = (kind, detail) => fs.appendFileSync(log, `${JSON.stringify({ kind, detail })}\n`);
 
 for (const name of ['spawn', 'spawnSync', 'exec', 'execSync', 'execFile', 'execFileSync', 'fork']) {

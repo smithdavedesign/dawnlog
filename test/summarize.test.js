@@ -22,7 +22,7 @@ const receipt = (branch, over = {}) => ({
 describe('promptFor', () => {
   test('carries the facts, redacted, and the final message', () => {
     const prompt = promptFor(receipt('fix-login'));
-    for (const fact of ['Branch: fix-login', 'Status: FAILED (dawnlog suggests fix: the last test run failed)', 'Last test: npm test → 1', 'Retries: 2', 'Risk: auth', 'Commits: Fix redirect', 'Files: src/auth.js +3 -1', 'Agent left for the reviewer: Rotate the key', "Agent's final message:"]) {
+    for (const fact of ['Branch: fix-login', 'Status: FAILED (overnight-receipts suggests fix: the last test run failed)', 'Last test: npm test → 1', 'Retries: 2', 'Risk: auth', 'Commits: Fix redirect', 'Files: src/auth.js +3 -1', 'Agent left for the reviewer: Rotate the key', "Agent's final message:"]) {
       assert.ok(prompt.includes(fact), fact);
     }
     assert.ok(!prompt.includes(FAKE.stripe));

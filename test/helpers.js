@@ -8,12 +8,12 @@ import { fileURLToPath } from 'node:url';
 
 export const MIN = 60_000;
 export const HOUR = 60 * MIN;
-export const BIN = fileURLToPath(new URL('../bin/dawnlog.js', import.meta.url));
+export const BIN = fileURLToPath(new URL('../bin/overnight-receipts.js', import.meta.url));
 
 const created = [];
 
 export function tmpDir(label) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `dawnlog-${label}-`));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `overnight-receipts-${label}-`));
   created.push(dir);
   return dir;
 }
@@ -202,12 +202,12 @@ export function makeHome() {
   return { home, projects };
 }
 
-/** Runs bin/dawnlog.js as a subprocess with a fake HOME. `node` adds Node flags (e.g. --import). */
+/** Runs bin/overnight-receipts.js as a subprocess with a fake HOME. `node` adds Node flags (e.g. --import). */
 export function runCli(args, { home, cwd, env = {}, node = [] } = {}) {
   const childEnv = { ...process.env, ...GIT_ENV, HOME: home };
   delete childEnv.CLAUDE_CONFIG_DIR;
   delete childEnv.NODE_TEST_CONTEXT;
-  delete childEnv.DAWNLOG_CLAUDE;
+  delete childEnv.OVERNIGHT_RECEIPTS_CLAUDE;
   Object.assign(childEnv, env);
   const result = spawnSync(process.execPath, [...node, BIN, ...args], { cwd: cwd ?? home, env: childEnv, encoding: 'utf8' });
   return { code: result.status, stdout: result.stdout, stderr: result.stderr };

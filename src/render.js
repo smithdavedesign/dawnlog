@@ -105,7 +105,7 @@ const nothing = (report) => `Nothing to triage: no branches changed and no Claud
 
 /** @param {{ window: string }} options the --since value as typed, for the header */
 export function renderText(report, { window }) {
-  const out = [`dawnlog · ${field(report.repo)} · since ${utc(report.since)} (${field(window)}) · base ${field(report.base)}`, summary(report), ''];
+  const out = [`overnight-receipts · ${field(report.repo)} · since ${utc(report.since)} (${field(window)}) · base ${field(report.base)}`, summary(report), ''];
   if (!report.receipts.length && !report.unmatched.length) out.push(nothing(report), '');
 
   report.receipts.forEach((r, i) => {
@@ -147,7 +147,7 @@ export function renderText(report, { window }) {
 export function renderMarkdown(report, { window }) {
   const name = report.repo.split(/[\\/]/).filter(Boolean).at(-1) ?? report.repo;
   const out = [
-    `# dawnlog — ${md(name)}`,
+    `# overnight-receipts — ${md(name)}`,
     '',
     `${code(report.repo)} · since ${utc(report.since)} (${md(window)}) · base ${code(report.base)}  `,
     summary(report),
@@ -210,7 +210,7 @@ export function toJson(report, { window }) {
   const run = (r) =>
     r && { command: r.command, exitCode: r.exitCode, ok: r.ok, masked: r.masked, done: r.done, source: `${r.file}:${r.line}` };
   return deepClean({
-    dawnlog: JSON_VERSION,
+    "overnight-receipts": JSON_VERSION,
     repo: report.repo,
     base: report.base,
     since: iso(report.since),

@@ -1,5 +1,7 @@
 # Roadmap — dawnlog
 
+_Renamed from **dawnlog** to **overnight-receipts** on 2026-10-11 (the npm name was taken). Notes below were written under the old name; the command is now `overnight-receipts`, the env vars `OVERNIGHT_RECEIPTS_*`._
+
 **Status (2026-10-11): M1, M2 and M3 are built, and every exit criterion has a passing test.** How each criterion is tested is in [BUILD.md](BUILD.md).
 
 ## M1 — Weekend: branch receipts from Claude Code logs ✅

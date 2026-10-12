@@ -1,5 +1,7 @@
 # BUILD — dawnlog M1–M3
 
+_Renamed from **dawnlog** to **overnight-receipts** on 2026-10-11 (the npm name was taken). Notes below were written under the old name; the command is now `overnight-receipts`, the env vars `OVERNIGHT_RECEIPTS_*`._
+
 M1 was built non-interactively by idea-build on 2026-10-11, and M2 and M3 were built the same day in a Claude Code session. The M1 notes below are kept as written. [M2 and M3](#m2-and-m3) follow them, and [What's left](#whats-left) is current.
 
 ## Plan
@@ -299,7 +301,7 @@ All 228 tests pass (`npm test`, about 6 s).
 
 **Packaging (owner decisions):**
 - License: MIT (added 2026-10-11). The bin's exec bit is set in git.
-- **The npm name `dawnlog` is taken** by an unrelated standup-report CLI (yyalim/dawnlog). Publish under another name (`dawnlog-cli` and `@smithdavedesign/dawnlog` were free on 2026-10-11), or make the repo public and use `npx github:smithdavedesign/dawnlog`.
+- The npm name `dawnlog` was taken by an unrelated standup-report CLI (yyalim/dawnlog), so the project is now **overnight-receipts** (free on npm on 2026-10-11). The repo is public, so `npx github:smithdavedesign/overnight-receipts` works now; `npm publish` is optional.
 - An optional GitHub Actions test workflow.
 
 ## Review
