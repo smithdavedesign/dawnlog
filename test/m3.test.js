@@ -332,11 +332,11 @@ describe('scripts/morning-digest.sh', () => {
     f = fixture();
   });
 
-  /** Runs the script with a fake `openclaw` on PATH that records its argv. */
-  function morning(env) {
+  /** Runs the script with a fake `openclaw` on PATH that records its argv and fails the first `failFirst` calls. */
+  function morning(env, failFirst = 0) {
     const bin = tmpDir('bin');
     const record = path.join(bin, 'calls.jsonl');
-    fs.writeFileSync(path.join(bin, 'openclaw'), `#!/usr/bin/env node\nrequire('node:fs').appendFileSync(${JSON.stringify(record)}, JSON.stringify(process.argv.slice(2)) + '\\n');\n`);
+    fs.writeFileSync(path.join(bin, 'openclaw'), `#!/usr/bin/env node\nconst fs = require('node:fs');\nfs.appendFileSync(${JSON.stringify(record)}, JSON.stringify(process.argv.slice(2)) + '\\n');\nprocess.exit(fs.readFileSync(${JSON.stringify(record)}, 'utf8').trim().split('\\n').length <= ${failFirst} ? 1 : 0);\n`);
     fs.chmodSync(path.join(bin, 'openclaw'), 0o755);
     const out = path.join(tmpDir('m'), 'digest.txt');
     const childEnv = { ...process.env, HOME: f.home, PATH: `${bin}${path.delimiter}${process.env.PATH}`, OVERNIGHT_RECEIPTS_OUT: out, OVERNIGHT_RECEIPTS_SINCE: '24h', ...env };
@@ -365,6 +365,16 @@ describe('scripts/morning-digest.sh', () => {
     const unset = morning({ OVERNIGHT_RECEIPTS_REPOS: f.repo });
     assert.equal(unset.code, 0, unset.stderr);
     assert.deepEqual(unset.sends, []);
+  });
+
+  test('a failed send is retried, and gives up after the last try', () => {
+    const env = { OVERNIGHT_RECEIPTS_REPOS: f.repo, OVERNIGHT_RECEIPTS_WHATSAPP_TO: '+15550000000', OVERNIGHT_RECEIPTS_SEND_WAIT: '0' };
+    const retried = morning(env, 2);
+    assert.equal(retried.code, 0, retried.stderr);
+    assert.equal(retried.sends.length, 3);
+    const failed = morning({ ...env, OVERNIGHT_RECEIPTS_SEND_TRIES: '2' }, 5);
+    assert.equal(failed.code, 1);
+    assert.equal(failed.sends.length, 2);
   });
 
   test('no repos matched exits 1', () => {
