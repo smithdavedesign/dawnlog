@@ -163,7 +163,7 @@ describe('exit 5: secret redaction', () => {
 
   test('exits 0 and writes the Markdown file', () => {
     assert.equal(out.code, 0, out.stderr);
-    assert.match(markdown, /^# dawnlog/);
+    assert.match(markdown, /^# overnight-receipts/);
     assert.match(markdown, /rotate-keys/);
   });
 
@@ -251,13 +251,13 @@ describe('CLI edges', () => {
   test('--help prints usage and exits 0', () => {
     const out = runCli(['--help'], { home: tmpDir('home') });
     assert.equal(out.code, 0);
-    assert.match(out.stdout, /Usage: dawnlog/);
+    assert.match(out.stdout, /Usage: overnight-receipts/);
   });
 
   test('unknown flag exits 2 with usage', () => {
     const out = runCli(['--nope'], { home: tmpDir('home') });
     assert.equal(out.code, 2);
-    assert.match(out.stderr, /Usage: dawnlog/);
+    assert.match(out.stderr, /Usage: overnight-receipts/);
   });
 
   test('bad --since exits 2 with a clear message', () => {

@@ -14,8 +14,8 @@ import { buildReport } from './report.js';
 import { projectsDir } from './sessions.js';
 import { summarize } from './summarize.js';
 
-export const USAGE = `Usage: dawnlog [--since 12h] [--repo PATH] [--base BRANCH] [--out FILE.md] [--json] [--summarize]
-       dawnlog digest --out FILE [--since 12h] [--repo PATH]... [--format text|md] [--summarize] [--quiet]
+export const USAGE = `Usage: overnight-receipts [--since 12h] [--repo PATH] [--base BRANCH] [--out FILE.md] [--json] [--summarize]
+       overnight-receipts digest --out FILE [--since 12h] [--repo PATH]... [--format text|md] [--summarize] [--quiet]
 
 Morning triage receipts for Claude Code runs: one receipt per git branch changed in the
 window, built from the session logs in ~/.claude/projects (and Entire checkpoints, when the
@@ -46,7 +46,7 @@ export function parseSince(value, now) {
 const result = (code, stdout = '', stderr = '') => ({ code, stdout: clean(stdout), stderr: clean(stderr) });
 
 const noSessions = (projects) =>
-  `dawnlog: no Claude Code sessions found: ${projects} does not exist.\n` +
+  `overnight-receipts: no Claude Code sessions found: ${projects} does not exist.\n` +
   'Nothing to triage. Run Claude Code in a repo first, or set CLAUDE_CONFIG_DIR if your Claude config lives elsewhere.\n';
 
 /** Entire checkpoints are a session source of their own, so a repo with them needs no ~/.claude. */
@@ -76,12 +76,12 @@ export function main(argv, env = process.env, now = Date.now()) {
       },
     }).values;
   } catch (err) {
-    return result(2, '', `dawnlog: ${err.message}\n\n${USAGE}\n`);
+    return result(2, '', `overnight-receipts: ${err.message}\n\n${USAGE}\n`);
   }
   if (args.help) return result(0, `${USAGE}\n`);
 
   const since = parseSince(args.since, now);
-  if (since === null) return result(2, '', `dawnlog: --since must look like 30m, 12h, 2d, 1w or 2026-10-10 (got "${args.since}")\n`);
+  if (since === null) return result(2, '', `overnight-receipts: --since must look like 30m, 12h, 2d, 1w or 2026-10-10 (got "${args.since}")\n`);
 
   const repo = path.resolve(args.repo ?? process.cwd());
   let projects = projectsDir(env);
@@ -94,7 +94,7 @@ export function main(argv, env = process.env, now = Date.now()) {
   try {
     report = buildReport({ repo, projects, since, base: args.base });
   } catch (err) {
-    return result(1, '', `dawnlog: ${err.message}\n`);
+    return result(1, '', `overnight-receipts: ${err.message}\n`);
   }
   if (args.summarize) summarize(report, { env });
 
@@ -105,7 +105,7 @@ export function main(argv, env = process.env, now = Date.now()) {
     try {
       fs.writeFileSync(args.out, clean(renderMarkdown(report, window)));
     } catch (err) {
-      return result(1, stdout, `dawnlog: could not write ${args.out}: ${err.message}\n`);
+      return result(1, stdout, `overnight-receipts: could not write ${args.out}: ${err.message}\n`);
     }
     // Keep --json output pure JSON: the "wrote" line goes to stderr there.
     if (args.json) stderr += `wrote ${args.out}\n`;
@@ -114,7 +114,7 @@ export function main(argv, env = process.env, now = Date.now()) {
   return result(0, stdout, stderr);
 }
 
-/** `dawnlog digest`: cron-friendly, writes one file across repos, exit 1 if any repo failed. */
+/** `overnight-receipts digest`: cron-friendly, writes one file across repos, exit 1 if any repo failed. */
 function digest(argv, env, now) {
   let args;
   try {
@@ -132,13 +132,13 @@ function digest(argv, env, now) {
       },
     }).values;
   } catch (err) {
-    return result(2, '', `dawnlog digest: ${err.message}\n\n${USAGE}\n`);
+    return result(2, '', `overnight-receipts digest: ${err.message}\n\n${USAGE}\n`);
   }
   if (args.help) return result(0, `${USAGE}\n`);
-  if (!args.out) return result(2, '', 'dawnlog digest: --out FILE is required (the digest is written there for delivery)\n');
-  if (!['text', 'md'].includes(args.format)) return result(2, '', `dawnlog digest: --format must be text or md (got "${args.format}")\n`);
+  if (!args.out) return result(2, '', 'overnight-receipts digest: --out FILE is required (the digest is written there for delivery)\n');
+  if (!['text', 'md'].includes(args.format)) return result(2, '', `overnight-receipts digest: --format must be text or md (got "${args.format}")\n`);
   const since = parseSince(args.since, now);
-  if (since === null) return result(2, '', `dawnlog digest: --since must look like 30m, 12h, 2d, 1w or 2026-10-10 (got "${args.since}")\n`);
+  if (since === null) return result(2, '', `overnight-receipts digest: --since must look like 30m, 12h, 2d, 1w or 2026-10-10 (got "${args.since}")\n`);
 
   const repos = (args.repo?.length ? args.repo : [process.cwd()]).map((r) => path.resolve(r));
   const projects = projectsDir(env);
@@ -158,10 +158,10 @@ function digest(argv, env, now) {
   try {
     writeAtomic(args.out, text);
   } catch (err) {
-    return result(1, '', `dawnlog digest: could not write ${args.out}: ${err.message}\n`);
+    return result(1, '', `overnight-receipts digest: could not write ${args.out}: ${err.message}\n`);
   }
   const failed = results.filter((r) => r.error);
-  const stderr = failed.map((r) => `dawnlog digest: ${r.repo}: ${r.error}\n`).join('');
+  const stderr = failed.map((r) => `overnight-receipts digest: ${r.repo}: ${r.error}\n`).join('');
   const stdout = args.quiet ? '' : `wrote ${args.out} (${branches} branch${branches === 1 ? '' : 'es'} across ${repos.length} repo${repos.length === 1 ? '' : 's'})\n`;
   return result(failed.length ? 1 : 0, stdout, stderr);
 }

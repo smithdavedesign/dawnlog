@@ -1,11 +1,11 @@
 {
-  "name": "dawnlog",
+  "name": "overnight-receipts",
   "version": "0.3.0",
   "description": "Morning triage receipts for overnight Claude Code runs: one receipt per git branch, built from the session logs already on disk.",
   "license": "MIT",
   "type": "module",
   "bin": {
-    "dawnlog": "bin/dawnlog.js"
+    "overnight-receipts": "bin/overnight-receipts.js"
   },
   "files": [
     "bin",

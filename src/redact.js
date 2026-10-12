@@ -1,4 +1,4 @@
-// Secret redaction and terminal safety for everything dawnlog prints or writes.
+// Secret redaction and terminal safety for everything overnight-receipts prints or writes.
 // Best-effort by design: the patterns cover common token formats, not every secret.
 
 export const REDACTED = '[REDACTED]';
@@ -42,7 +42,7 @@ export function sanitize(text) {
 }
 
 /**
- * The last step before any byte leaves dawnlog. Sanitizes first: an escape sequence glued
+ * The last step before any byte leaves overnight-receipts. Sanitizes first: an escape sequence glued
  * to a token would otherwise hide it from the patterns and then vanish, leaving the token.
  */
 export function clean(text) {

@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/smithdavedesign/dawnlog/blob/main/schema/receipts.schema.json",
-  "title": "dawnlog receipts (dawnlog --json)",
+  "$id": "https://github.com/smithdavedesign/overnight-receipts/blob/main/schema/receipts.schema.json",
+  "title": "overnight-receipts --json output",
   "description": "Version 1. Transcript-derived fields cite their source as `file:line` in `sources`; git-derived fields cite `git:<base>...<branch>`; null means there is nothing to point at.",
   "type": "object",
-  "required": ["dawnlog", "repo", "base", "since", "window", "counts", "receipts", "unmatched", "entire", "notes"],
+  "required": ["overnight-receipts", "repo", "base", "since", "window", "counts", "receipts", "unmatched", "entire", "notes"],
   "additionalProperties": false,
   "properties": {
-    "dawnlog": { "const": 1 },
+    "overnight-receipts": { "const": 1 },
     "repo": { "type": "string" },
     "base": { "type": "string" },
     "since": { "type": "string", "format": "date-time" },

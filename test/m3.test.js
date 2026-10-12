@@ -43,7 +43,7 @@ function fixture() {
 function trapped(args, { home, env = {} }) {
   const log = path.join(tmpDir('trap'), 'calls.jsonl');
   fs.writeFileSync(log, '');
-  const out = runCli(args, { home, env: { DAWNLOG_TRAP_LOG: log, ...env }, node: ['--import', TRAP] });
+  const out = runCli(args, { home, env: { OVERNIGHT_RECEIPTS_TRAP_LOG: log, ...env }, node: ['--import', TRAP] });
   const calls = fs
     .readFileSync(log, 'utf8')
     .split('\n')
@@ -154,7 +154,7 @@ describe('--summarize', () => {
   });
 
   test('no claude on PATH is a note, not a crash', () => {
-    const out = runCli(['--since', '24h', '--repo', f.repo, '--summarize'], { home: f.home, env: { DAWNLOG_CLAUDE: path.join(tmpDir('none'), 'claude') } });
+    const out = runCli(['--since', '24h', '--repo', f.repo, '--summarize'], { home: f.home, env: { OVERNIGHT_RECEIPTS_CLAUDE: path.join(tmpDir('none'), 'claude') } });
     assert.equal(out.code, 0, out.stderr);
     assert.match(out.stdout, /note: --summarize: .*not found on PATH/);
   });
@@ -168,7 +168,7 @@ describe('--summarize', () => {
   });
 });
 
-describe('exit 2: dawnlog digest writes a file for push delivery', () => {
+describe('exit 2: overnight-receipts digest writes a file for push delivery', () => {
   let f;
   before(() => {
     f = fixture();
@@ -181,7 +181,7 @@ describe('exit 2: dawnlog digest writes a file for push delivery', () => {
     assert.equal(out.code, 0, out.stderr);
     assert.match(out.stdout, /^wrote .*digest\.txt \(2 branches across 1 repo\)$/m);
     const digest = fs.readFileSync(file, 'utf8');
-    assert.match(digest, /^dawnlog digest · since .* UTC \(24h\)$/m);
+    assert.match(digest, /^overnight-receipts digest · since .* UTC \(24h\)$/m);
     assert.match(digest, new RegExp(`^${path.basename(f.repo)}: 2 branches: 1 fix, 1 merge$`, 'm'));
     assert.match(digest, /^ {2}fix {3}fix-login \(FAILED\) — the last test run failed · risk auth · 1 for you$/m);
     assert.match(digest, /^ {2}merge add-search \(PASSED\) — tests pass$/m);
@@ -208,7 +208,7 @@ describe('exit 2: dawnlog digest writes a file for push delivery', () => {
     assert.equal(out.code, 0, out.stderr);
     assert.equal(out.stdout, '');
     const digest = fs.readFileSync(file, 'utf8');
-    assert.match(digest, /^# dawnlog digest/);
+    assert.match(digest, /^# overnight-receipts digest/);
     assert.match(digest, /^- \*\*fix\*\* `fix-login` \(FAILED\) — the last test run failed · risk auth · 1 for you$/m);
   });
 
@@ -339,8 +339,8 @@ describe('scripts/morning-digest.sh', () => {
     fs.writeFileSync(path.join(bin, 'openclaw'), `#!/usr/bin/env node\nrequire('node:fs').appendFileSync(${JSON.stringify(record)}, JSON.stringify(process.argv.slice(2)) + '\\n');\n`);
     fs.chmodSync(path.join(bin, 'openclaw'), 0o755);
     const out = path.join(tmpDir('m'), 'digest.txt');
-    const childEnv = { ...process.env, HOME: f.home, PATH: `${bin}${path.delimiter}${process.env.PATH}`, DAWNLOG_OUT: out, DAWNLOG_SINCE: '24h', ...env };
-    delete childEnv.DAWNLOG_WHATSAPP_TO;
+    const childEnv = { ...process.env, HOME: f.home, PATH: `${bin}${path.delimiter}${process.env.PATH}`, OVERNIGHT_RECEIPTS_OUT: out, OVERNIGHT_RECEIPTS_SINCE: '24h', ...env };
+    delete childEnv.OVERNIGHT_RECEIPTS_WHATSAPP_TO;
     Object.assign(childEnv, env);
     const r = spawnSync('/bin/sh', [SCRIPT], { env: childEnv, encoding: 'utf8' });
     const sends = fs.existsSync(record) ? fs.readFileSync(record, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
@@ -348,7 +348,7 @@ describe('scripts/morning-digest.sh', () => {
   }
 
   test('sends the digest to WhatsApp when branches need triage; non-repos in the list are skipped', () => {
-    const r = morning({ DAWNLOG_REPOS: `${f.repo} ${tmpDir('plain')}`, DAWNLOG_WHATSAPP_TO: '+15550000000' });
+    const r = morning({ OVERNIGHT_RECEIPTS_REPOS: `${f.repo} ${tmpDir('plain')}`, OVERNIGHT_RECEIPTS_WHATSAPP_TO: '+15550000000' });
     assert.equal(r.code, 0, r.stderr);
     assert.equal(r.sends.length, 1);
     const [args] = r.sends;
@@ -358,16 +358,16 @@ describe('scripts/morning-digest.sh', () => {
   });
 
   test('a quiet morning writes the file and sends nothing; no number means no send', () => {
-    const quiet = morning({ DAWNLOG_REPOS: makeRepo(), DAWNLOG_WHATSAPP_TO: '+15550000000' });
+    const quiet = morning({ OVERNIGHT_RECEIPTS_REPOS: makeRepo(), OVERNIGHT_RECEIPTS_WHATSAPP_TO: '+15550000000' });
     assert.equal(quiet.code, 0, quiet.stderr);
     assert.deepEqual(quiet.sends, []);
     assert.match(fs.readFileSync(quiet.out, 'utf8'), /nothing to triage/);
-    const unset = morning({ DAWNLOG_REPOS: f.repo });
+    const unset = morning({ OVERNIGHT_RECEIPTS_REPOS: f.repo });
     assert.equal(unset.code, 0, unset.stderr);
     assert.deepEqual(unset.sends, []);
   });
 
   test('no repos matched exits 1', () => {
-    assert.equal(morning({ DAWNLOG_REPOS: tmpDir('plain') }).code, 1);
+    assert.equal(morning({ OVERNIGHT_RECEIPTS_REPOS: tmpDir('plain') }).code, 1);
   });
 });

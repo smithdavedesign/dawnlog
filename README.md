@@ -1,4 +1,6 @@
-# dawnlog — morning triage receipts for overnight AI agent runs
+# overnight-receipts — morning triage receipts for overnight AI agent runs
+
+_Formerly **dawnlog**: renamed 2026-10-11 because the npm name `dawnlog` belongs to an unrelated tool. The old GitHub URL redirects here._
 
 For developers who let Claude Code run unattended, it reads the session logs already on disk plus git branches and prints a per-branch receipt of what the agent decided, retried, skipped and verified, ranked for merge/fix/kill.
 
@@ -16,9 +18,9 @@ _Researched by the idea pipeline on 2026-10-10 ([original record](https://github
 Requires Node ≥ 22 and git. There are no dependencies and nothing to build.
 
 ```sh
-npx github:smithdavedesign/dawnlog --since 12h     # in a repo you ran Claude Code in (once the repo is public)
-node bin/dawnlog.js --since 12h                    # from a checkout
-npm link && dawnlog --since 12h                    # put `dawnlog` on PATH
+npx github:smithdavedesign/overnight-receipts --since 12h     # in a repo you ran Claude Code in
+node bin/overnight-receipts.js --since 12h                    # from a checkout
+npm link && overnight-receipts --since 12h                    # put `overnight-receipts` on PATH
 npm run demo                                       # a fixture run in a temp dir: receipts, Markdown and a digest
 ```
 
@@ -58,8 +60,8 @@ npm run demo                                       # a fixture run in a temp dir
 ## Commands
 
 ```
-dawnlog [--since 12h] [--repo PATH] [--base BRANCH] [--out FILE.md] [--json] [--summarize]
-dawnlog digest --out FILE [--since 12h] [--repo PATH]... [--format text|md] [--summarize] [--quiet]
+overnight-receipts [--since 12h] [--repo PATH] [--base BRANCH] [--out FILE.md] [--json] [--summarize]
+overnight-receipts digest --out FILE [--since 12h] [--repo PATH]... [--format text|md] [--summarize] [--quiet]
 ```
 
 | Option | Does |
@@ -90,7 +92,7 @@ Exit codes: 0 done (also when there's nothing to triage or no `~/.claude/project
 | fix | PASSED, but the agent left items for you. |
 | merge | PASSED. Says "review … first" when risky paths or out-of-area files changed. |
 
-dawnlog never suggests `merge` without a passing test run.
+overnight-receipts never suggests `merge` without a passing test run.
 
 **Ranking**, worst first:
 1. Status: FAILED, then UNVERIFIED, then PASSED.
@@ -104,10 +106,10 @@ dawnlog never suggests `merge` without a passing test run.
 
 ### Morning digest (cron)
 
-`dawnlog digest` writes one short file across repos, one line per branch, worst first. It replaces the file atomically, so a reader never sees half a digest:
+`overnight-receipts digest` writes one short file across repos, one line per branch, worst first. It replaces the file atomically, so a reader never sees half a digest:
 
 ```
-dawnlog digest · since 2026-10-11 07:00 UTC (12h)
+overnight-receipts digest · since 2026-10-11 07:00 UTC (12h)
 
 app: 2 branches: 1 fix, 1 merge
   fix   fix-login (FAILED) — the last test run failed · retries 2 · risk dependency+auth · 2 for you
@@ -118,29 +120,29 @@ site: nothing to triage
 Example crontab entry. Note that `%` must be escaped in crontab. Sending is up to you; here it goes to WhatsApp through OpenClaw:
 
 ```cron
-30 7 * * * cd ~ && dawnlog digest --since 12h --repo ~/code/app --repo ~/code/site --out ~/.dawnlog/digest.txt --quiet && openclaw message send --channel whatsapp --target "+1…" --message "$(cat ~/.dawnlog/digest.txt)"
+30 7 * * * cd ~ && overnight-receipts digest --since 12h --repo ~/code/app --repo ~/code/site --out ~/.overnight-receipts/digest.txt --quiet && openclaw message send --channel whatsapp --target "+1…" --message "$(cat ~/.overnight-receipts/digest.txt)"
 ```
 
 `scripts/morning-digest.sh` wraps this for launchd or cron. It skips anything in the list that isn't a git repo. It sends the digest to WhatsApp through `openclaw message send` only when a branch needs triage, so quiet mornings send nothing. It is configured with environment variables, listed at the top of the script. On macOS, launchd jobs can't read `~/Documents`, so point it at checkouts outside it.
 
 ### Summaries (`--summarize`)
 
-For each receipt, dawnlog runs `claude -p --output-format text --no-session-persistence --tools ""` in a temp directory. It sends the receipt's facts and the agent's final message on stdin, both secret-redacted first.
+For each receipt, overnight-receipts runs `claude -p --output-format text --no-session-persistence --tools ""` in a temp directory. It sends the receipt's facts and the agent's final message on stdin, both secret-redacted first.
 
-- It has no tools and writes no session file, so dawnlog never reads its own summaries back as sessions.
+- It has no tools and writes no session file, so overnight-receipts never reads its own summaries back as sessions.
 - It uses whatever auth `claude` has. A Claude subscription login costs nothing extra; an `ANTHROPIC_API_KEY` in the environment is billed per call.
-- Set `DAWNLOG_CLAUDE` to use another binary.
+- Set `OVERNIGHT_RECEIPTS_CLAUDE` to use another binary.
 - If a summary fails, a note says why and the receipts print as usual.
 
 ### Entire checkpoints
 
-If the repo has [Entire](https://entire.io)'s metadata branch (`entire/checkpoints/v1`, local or `origin/`), dawnlog reads it as well:
+If the repo has [Entire](https://entire.io)'s metadata branch (`entire/checkpoints/v1`, local or `origin/`), overnight-receipts reads it as well:
 
 - **Matching:** an `Entire-Checkpoint:` trailer on a branch's commit places that checkpoint's sessions on the branch (`via entire`). This is the strongest evidence, so it's checked first.
 - **Sessions from other machines:** sessions Entire stored from elsewhere (another laptop, a CI runner) are parsed from the checkpoint's `full.jsonl`. They are cited as `entire:<checkpoint>/<n>/full.jsonl:<line>`.
 - **No local logs needed:** a repo with Entire works even without `~/.claude/projects`.
 - **Not receipts:** Entire's own branches never get a receipt.
-- **Not supported yet:** Entire's newer ref-based storage (`refs/entire/checkpoints/…`). dawnlog says so in a note.
+- **Not supported yet:** Entire's newer ref-based storage (`refs/entire/checkpoints/…`). overnight-receipts says so in a note.
 
 ## Safety
 
@@ -158,7 +160,7 @@ UPDATE_GOLDEN=1 node --test test/m2.test.js   # after an intended ranking change
 
 | Path | What |
 |---|---|
-| `bin/dawnlog.js` | 5-line shim (npm links bins through a symlink) |
+| `bin/overnight-receipts.js` | 5-line shim (npm links bins through a symlink) |
 | `src/cli.js` | flags, `--since`, exit codes, `--out`, `--json`, `--summarize`, `digest` |
 | `src/sessions.js` | Claude Code JSONL parser: task, Bash runs and results, retries, final message, line numbers |
 | `src/git.js` | read-only git queries: branches, base, worktrees, commits + trailers, numstat, squash detection, blobs |
@@ -167,7 +169,7 @@ UPDATE_GOLDEN=1 node --test test/m2.test.js   # after an intended ranking change
 | `src/deferred.js` | "needs you" items from the final message |
 | `src/entire.js` | Entire checkpoint reading and trailer links |
 | `src/summarize.js` | `--summarize` via `claude -p` |
-| `src/digest.js` | `dawnlog digest` rendering and atomic write |
+| `src/digest.js` | `overnight-receipts digest` rendering and atomic write |
 | `src/render.js` | terminal, Markdown and JSON output |
 | `src/redact.js` | secret redaction and escape stripping |
 | `schema/receipts.schema.json` | the `--json` schema |

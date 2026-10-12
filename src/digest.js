@@ -1,4 +1,4 @@
-// `dawnlog digest`: one short file across one or more repos, for cron and push delivery
+// `overnight-receipts digest`: one short file across one or more repos, for cron and push delivery
 // (WhatsApp, Slack, email: whatever sends the file). One line per branch, worst first.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -37,7 +37,7 @@ function details(r) {
  */
 export function renderDigest(results, { since, window, format, note = null }) {
   const mdx = format === 'md';
-  const out = [mdx ? `# dawnlog digest · since ${utc(since)} (${one(window)})` : `dawnlog digest · since ${utc(since)} (${one(window)})`, ''];
+  const out = [mdx ? `# overnight-receipts digest · since ${utc(since)} (${one(window)})` : `overnight-receipts digest · since ${utc(since)} (${one(window)})`, ''];
   if (note) out.push(mdx ? `> note: ${md(note)}` : `note: ${one(note)}`, '');
   let branches = 0;
   for (const { repo, report, error } of results) {
