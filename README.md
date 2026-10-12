@@ -123,7 +123,7 @@ Example crontab entry. Note that `%` must be escaped in crontab. Sending is up t
 30 7 * * * cd ~ && overnight-receipts digest --since 12h --repo ~/code/app --repo ~/code/site --out ~/.overnight-receipts/digest.txt --quiet && openclaw message send --channel whatsapp --target "+1…" --message "$(cat ~/.overnight-receipts/digest.txt)"
 ```
 
-`scripts/morning-digest.sh` wraps this for launchd or cron. It skips anything in the list that isn't a git repo. It sends the digest to WhatsApp through `openclaw message send` only when a branch needs triage, so quiet mornings send nothing. It is configured with environment variables, listed at the top of the script. On macOS, launchd jobs can't read `~/Documents`, so point it at checkouts outside it.
+`scripts/morning-digest.sh` wraps this for launchd or cron. It skips anything in the list that isn't a git repo. It sends the digest to WhatsApp through `openclaw message send` only when a branch needs triage, so quiet mornings send nothing. A failed send is retried (3 tries, 5 minutes apart, by default), so a gateway that's reconnecting still delivers. It is configured with environment variables, listed at the top of the script. On macOS, launchd jobs can't read `~/Documents`, so point it at checkouts outside it.
 
 ### Summaries (`--summarize`)
 

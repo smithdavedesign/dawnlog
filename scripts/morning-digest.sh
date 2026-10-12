@@ -6,6 +6,8 @@
 #   OVERNIGHT_RECEIPTS_SINCE        window (default 14h: an evening-to-morning night)
 #   OVERNIGHT_RECEIPTS_OUT          digest file (default ~/.overnight-receipts/digest.txt)
 #   OVERNIGHT_RECEIPTS_WHATSAPP_TO  E.164 number to send to via `openclaw message send`; unset = write the file only
+#   OVERNIGHT_RECEIPTS_SEND_TRIES   send attempts before giving up (default 3: a gateway mid-reconnect gets another chance)
+#   OVERNIGHT_RECEIPTS_SEND_WAIT    seconds between attempts (default 300)
 #   OVERNIGHT_RECEIPTS_EMIT         optional event logger: <emit> overnight-receipts digest <event> <status> "<message>"
 set -u
 here=$(cd "$(dirname "$0")/.." && pwd)
@@ -40,10 +42,16 @@ if [ -z "${OVERNIGHT_RECEIPTS_WHATSAPP_TO:-}" ]; then
   emit run ok "${branches:-0} branches; written to $out (no OVERNIGHT_RECEIPTS_WHATSAPP_TO, not sent)"
   exit "$code"
 fi
-if openclaw message send --channel whatsapp --target "$OVERNIGHT_RECEIPTS_WHATSAPP_TO" --message "$(cat "$out")" >/dev/null 2>&1; then
-  emit send ok "${branches:-0} branches sent to WhatsApp"
-else
-  emit send fail "openclaw message send failed; digest is in $out"
-  exit 1
-fi
+tries=${OVERNIGHT_RECEIPTS_SEND_TRIES:-3}
+wait_s=${OVERNIGHT_RECEIPTS_SEND_WAIT:-300}
+try=1
+until openclaw message send --channel whatsapp --target "$OVERNIGHT_RECEIPTS_WHATSAPP_TO" --message "$(cat "$out")" >/dev/null 2>&1; do
+  if [ "$try" -ge "$tries" ]; then
+    emit send fail "openclaw message send failed $tries times; digest is in $out"
+    exit 1
+  fi
+  try=$((try + 1))
+  sleep "$wait_s"
+done
+emit send ok "${branches:-0} branches sent to WhatsApp$([ "$try" -gt 1 ] && echo " (attempt $try)")"
 exit "$code"
