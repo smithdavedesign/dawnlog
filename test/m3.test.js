@@ -3,6 +3,7 @@
 //   - digest file written to the given path on a fixture run
 // plus Entire checkpoint ingestion.
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
@@ -321,5 +322,52 @@ describe('exit 3: Entire checkpoint ingestion', () => {
     const { home: h } = makeHome();
     const r = runCli(['--since', '24h', '--repo', plain], { home: h });
     assert.match(r.stdout, /note: Entire's ref-based checkpoints .* not read yet/);
+  });
+});
+
+describe('scripts/morning-digest.sh', () => {
+  const SCRIPT = fileURLToPath(new URL('../scripts/morning-digest.sh', import.meta.url));
+  let f;
+  before(() => {
+    f = fixture();
+  });
+
+  /** Runs the script with a fake `openclaw` on PATH that records its argv. */
+  function morning(env) {
+    const bin = tmpDir('bin');
+    const record = path.join(bin, 'calls.jsonl');
+    fs.writeFileSync(path.join(bin, 'openclaw'), `#!/usr/bin/env node\nrequire('node:fs').appendFileSync(${JSON.stringify(record)}, JSON.stringify(process.argv.slice(2)) + '\\n');\n`);
+    fs.chmodSync(path.join(bin, 'openclaw'), 0o755);
+    const out = path.join(tmpDir('m'), 'digest.txt');
+    const childEnv = { ...process.env, HOME: f.home, PATH: `${bin}${path.delimiter}${process.env.PATH}`, DAWNLOG_OUT: out, DAWNLOG_SINCE: '24h', ...env };
+    delete childEnv.DAWNLOG_WHATSAPP_TO;
+    Object.assign(childEnv, env);
+    const r = spawnSync('/bin/sh', [SCRIPT], { env: childEnv, encoding: 'utf8' });
+    const sends = fs.existsSync(record) ? fs.readFileSync(record, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
+    return { code: r.status, stderr: r.stderr, out, sends };
+  }
+
+  test('sends the digest to WhatsApp when branches need triage; non-repos in the list are skipped', () => {
+    const r = morning({ DAWNLOG_REPOS: `${f.repo} ${tmpDir('plain')}`, DAWNLOG_WHATSAPP_TO: '+15550000000' });
+    assert.equal(r.code, 0, r.stderr);
+    assert.equal(r.sends.length, 1);
+    const [args] = r.sends;
+    assert.deepEqual(args.slice(0, 6), ['message', 'send', '--channel', 'whatsapp', '--target', '+15550000000']);
+    assert.equal(args[6], '--message');
+    assert.equal(`${args[7]}\n`, fs.readFileSync(r.out, 'utf8'));
+  });
+
+  test('a quiet morning writes the file and sends nothing; no number means no send', () => {
+    const quiet = morning({ DAWNLOG_REPOS: makeRepo(), DAWNLOG_WHATSAPP_TO: '+15550000000' });
+    assert.equal(quiet.code, 0, quiet.stderr);
+    assert.deepEqual(quiet.sends, []);
+    assert.match(fs.readFileSync(quiet.out, 'utf8'), /nothing to triage/);
+    const unset = morning({ DAWNLOG_REPOS: f.repo });
+    assert.equal(unset.code, 0, unset.stderr);
+    assert.deepEqual(unset.sends, []);
+  });
+
+  test('no repos matched exits 1', () => {
+    assert.equal(morning({ DAWNLOG_REPOS: tmpDir('plain') }).code, 1);
   });
 });

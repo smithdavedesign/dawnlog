@@ -264,7 +264,7 @@ All 7 M1 exit criteria pass (`npm test`: 152 tests, 0 failures):
 
 ### Exit criteria
 
-All 225 tests pass (`npm test`, about 6 s).
+All 228 tests pass (`npm test`, about 6 s).
 
 | # | Criterion | Status | Test |
 |---|---|---|---|
@@ -272,7 +272,7 @@ All 225 tests pass (`npm test`, about 6 s).
 | M2.2 | Each receipt field carries a `source: file:line` | ✅ | `m2.test.js` › exit 2: every `sources` key present, and each `file:line` opened to check it holds the task, the command or the item |
 | M2.3 | `--json` validates against a schema | ✅ | `m2.test.js` › exit 3, plus a test that a broken document fails; `m3.test.js` validates the Entire and `--summarize` variants |
 | M3.1 | Without `--summarize`, no subprocess or network call other than git | ✅ | `m3.test.js` › exit 1: `test/fixtures/trap.mjs` preloaded with `--import` patches every `child_process` and `net`/`tls`/`http(s)`/`dns`/`fetch` entry. Checked for receipts, `--json`, `--out` and `digest`, plus a test that the trap does see `claude` with `--summarize`. |
-| M3.2 | Digest file written to the given path on a fixture run | ✅ | `m3.test.js` › exit 2 (also: several repos, a bad repo, md, quiet, atomic replace, redaction) |
+| M3.2 | Digest file written to the given path on a fixture run | ✅ | `m3.test.js` › exit 2 (also: several repos, a bad repo, md, quiet, atomic replace, redaction), plus `scripts/morning-digest.sh` with a fake `openclaw` |
 | M3.3 | Entire checkpoint ingestion if present | ✅ | `m3.test.js` › exit 3, `entire.test.js` |
 | PRD | Receipts under 5 s for 100 session files | ✅ | `perf.test.js` |
 
