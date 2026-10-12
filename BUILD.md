@@ -1,4 +1,6 @@
-# BUILD — dawnlog M1
+# BUILD — dawnlog M1–M3
+
+M1 was built non-interactively by idea-build on 2026-10-11, and M2 and M3 were built the same day in a Claude Code session. The M1 notes below are kept as written. [M2 and M3](#m2-and-m3) follow them, and [What's left](#whats-left) is current.
 
 ## Plan
 
@@ -232,34 +234,73 @@ All 7 M1 exit criteria pass (`npm test`: 152 tests, 0 failures):
 | 6 | Unmatched sessions listed, never dropped | ✅ | `cli.test.js` › exit 6; `report.test.js` › every session lands in exactly one place |
 | 7 | No `~/.claude/projects` → exit 0 + clear message | ✅ | `cli.test.js` › exit 7 |
 
+## M2 and M3
+
+### Decisions
+
+| Question | Decision | Why |
+|---|---|---|
+| Ranking (M2) | Status first: FAILED > UNVERIFIED > PASSED, as before. Then risky before not, then more risk labels, then more retries, then more needs-you items, then name. | PRD: "failed-or-unverified and high-risk paths first". Status stays on top, so M1's exit criterion 2 still holds. |
+| merge / fix / kill | The rule table in `src/triage.js` (copied in the README). `merge` only when PASSED. `kill` for no commits, already squash-merged, or FAILED after ≥ 5 retries. | A wrong `merge` is the costly mistake. A wrong `kill` costs a look. |
+| "Deferred / needs you" | Read from the session's **final** assistant message only. It counts phrases ("I couldn't…", "you'll need to…", "skipped", "TODO"), bullets under headings such as "Next steps" or "Not done", and lines ending in `?`. Code blocks are skipped, and there are at most 10 items. | That's where agents put their summary. Earlier messages are full of plans that later got done. |
+| `source: file:line` (M2) | `sources` on every receipt, with one key per field. Transcript fields cite `file:line` (1-based, blank lines counted). git fields cite `git:<base>...<branch>`. null means there's nothing to point at, such as no test run. Text output shows `· L12`. | The exit criterion says file:line, but commits and risk come from git, not a transcript. Inventing a line for them would be worse than citing git. |
+| `--json` | Version 1 is documented in `schema/receipts.schema.json` (2020-12). It's validated in tests by a ~60-line validator in `test/` that throws on unknown keywords, so nothing is installed. Every string goes through `clean()` before serialising. | Zero dependencies, and the schema can't quietly outgrow the check. |
+| Already-merged branches | Skipped, with a count in a note. A branch counts as merged if it has nothing ahead of base, or if it landed by squash: every changed file is identical in base, or its diff's patch-id equals a base commit's. If a session ran on it, it gets a receipt with `kill`. | Real run: RepoHQ went from 16 receipts to 3. GitHub squash merges leave branches looking unmerged. |
+| Denied tool calls | `toolDenialKind`, or a result starting "The user doesn't want to proceed", means the run never happened. It isn't a failure, a retry or the verdict. | Found in a real session file. Before this, a denied `npm test` gave a false FAILED. |
+| Files outside the task area (PRD) | The area is the directories the prompt names, if any changed. Otherwise it's the directory (two levels deep) with the most changed lines, plus any with at least half as many. | Explainable in one line. A one-area branch never gets a scope line. |
+| `--summarize` (M3) | `claude -p --output-format text --no-session-persistence --tools ""`, run in `os.tmpdir()`. The prompt is the receipt's facts plus the last 3,000 characters of the final message, all through `clean()`. At most 20 receipts, 120 s each. Failures become notes. | No tools and no session file, so dawnlog never reads its own summaries back as sessions. The temp directory keeps CLAUDE.md out. Using the user's own `claude` means a subscription login costs nothing extra; an `ANTHROPIC_API_KEY` is billed per call. |
+| `dawnlog digest` (M3) | `--out` is required. It takes several `--repo`, writes text or Markdown, and replaces the file atomically (temp file plus rename). If one repo fails, the error goes in the file and the exit code is 1; the rest are still written. Without `~/.claude/projects` it still lists branches. | Cron-friendly: one file per run, no partial reads, and failures are visible both in the file and to cron. |
+| Entire (M3) | Reads the branch backend `entire/checkpoints/v1` (local, then `origin/`). Field names come from entireio/cli's `e2e/testutil/metadata.go`. The `Entire-Checkpoint` trailer is match rule 0. Sessions only in Entire are parsed from `full.jsonl` when the agent is Claude Code. The ref backend is noted, not read. Entire's branches are never receipts. | The trailer is evidence written at commit time, the strongest there is. The ref backend's tree layout isn't documented, so guessing at it would risk misreading. |
+
+### New files
+
+- `src/triage.js`: suggestion rules, ranking and task area.
+- `src/deferred.js`: the needs-you extractor.
+- `src/entire.js`: checkpoint reading and trailer links.
+- `src/summarize.js`: `--summarize`.
+- `src/digest.js`: `dawnlog digest`.
+- `schema/receipts.schema.json`: the `--json` schema.
+- Changed: `sessions.js` (line numbers, final message, edits, denied runs), `git.js` (trailers, squash detection, batched blob reads), `report.js`, `render.js` (JSON) and `cli.js`.
+
+### Exit criteria
+
+All 225 tests pass (`npm test`, about 6 s).
+
+| # | Criterion | Status | Test |
+|---|---|---|---|
+| M2.1 | Ranking order matches a golden file for the fixture set | ✅ | `m2.test.js` › exit 1: nine branches, one per rule, against `test/golden/ranking.txt`; text and `--json` agree |
+| M2.2 | Each receipt field carries a `source: file:line` | ✅ | `m2.test.js` › exit 2: every `sources` key present, and each `file:line` opened to check it holds the task, the command or the item |
+| M2.3 | `--json` validates against a schema | ✅ | `m2.test.js` › exit 3, plus a test that a broken document fails; `m3.test.js` validates the Entire and `--summarize` variants |
+| M3.1 | Without `--summarize`, no subprocess or network call other than git | ✅ | `m3.test.js` › exit 1: `test/fixtures/trap.mjs` preloaded with `--import` patches every `child_process` and `net`/`tls`/`http(s)`/`dns`/`fetch` entry. Checked for receipts, `--json`, `--out` and `digest`, plus a test that the trap does see `claude` with `--summarize`. |
+| M3.2 | Digest file written to the given path on a fixture run | ✅ | `m3.test.js` › exit 2 (also: several repos, a bad repo, md, quiet, atomic replace, redaction) |
+| M3.3 | Entire checkpoint ingestion if present | ✅ | `m3.test.js` › exit 3, `entire.test.js` |
+| PRD | Receipts under 5 s for 100 session files | ✅ | `perf.test.js` |
+
+### Checked on real data (2026-10-11, read-only, on this machine)
+
+- **Session file schema.** A 2,993-record session from Claude Code 2.1.x has the fields the parser reads. Bash failures carry `is_error` and an "Exit code N" prefix, with no `toolUseResult.exitCode`, and the parser handles both shapes. Denied calls (`toolDenialKind`) were the one new shape, and they're handled now.
+- **RepoHQ and ai-stack, `--since 3d`.** 0.4–0.7 s each, and `--json` passes the schema. The 7 sessions found were placed or explained as listed in the PRD status table. Squash detection took RepoHQ from 16 receipts to 3.
+- **`claude -p` flags.** The exact `--summarize` flags ran against the real `claude` 2.1.296 with a trivial prompt and no API key in the environment.
+
 ## What's left
 
-**Before trusting it on real nights:**
-- Run it on David's real sessions; this is the REVIEW's proof test (≥ 9/10 attributed to the right branch).
-- Fixtures follow the schema from third-party write-ups, not a real file. Nothing was read from `~/.claude/projects`, because this build stayed inside the repo. Check in particular that Bash failures carry `is_error`/`exitCode` the way the parser expects.
+**Needs real use (PRD metrics):**
+- The proof test: at least 9 of 10 real overnight sessions on the right branch.
+- Two weeks of measured triage time.
+- `--summarize` on a real night, to judge whether the summaries are worth the wait.
 
-**M2:**
-- Merge/fix/kill labels and a golden ranking.
-- Deferred-work list.
-- `source: file:line` on every field (the parser already walks lines in order, so this is cheap).
-- `--json` with a schema.
-
-**M3:**
-- `--summarize` via `claude -p`.
-- `dawnlog digest`.
-- Entire checkpoint ingestion.
-
-**Not planned in any milestone yet:**
-- "Files outside the task's main directories" (PRD).
-- Subagent transcripts (`<session>/subagents/*.jsonl`).
+**Not built:**
+- Entire's ref-based checkpoint storage (`refs/entire/checkpoints/<shard>/<id>`).
+- Subagent transcripts (`<session>/subagents/*.jsonl`) and Entire's `tasks/` folder.
 - Uncommitted work in worktrees.
-- Codex support.
-- Performance: the PRD target is 100 files in < 5 s, which isn't tested. Files are read whole (`readFileSync`), so very large transcripts may need streaming.
+- Codex sessions (a PRD non-goal for v1).
+- Wrapped test commands (`bash -c "npm test"`, `make -C dir test`) still show as UNVERIFIED, which is the safe side.
+- Windows is untested.
 
-**Packaging:**
-- Choose a license.
-- Set the exec bit on `bin/dawnlog.js` in git (`git update-index --chmod=+x bin/dawnlog.js`; the sandbox blocked `chmod`). npm sets it on install anyway.
-- Optional: a GitHub Actions test workflow (free for public repos).
+**Packaging (owner decisions):**
+- License: MIT (added 2026-10-11). The bin's exec bit is set in git.
+- **The npm name `dawnlog` is taken** by an unrelated standup-report CLI (yyalim/dawnlog). Publish under another name (`dawnlog-cli` and `@smithdavedesign/dawnlog` were free on 2026-10-11), or make the repo public and use `npx github:smithdavedesign/dawnlog`.
+- An optional GitHub Actions test workflow.
 
 ## Review
 

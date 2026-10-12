@@ -1,5 +1,5 @@
 // `npm run demo`: builds a throwaway repo + fake ~/.claude in a temp dir, runs dawnlog on it,
-// prints the terminal and Markdown receipts, then deletes everything. Touches nothing of yours.
+// prints the terminal and Markdown receipts and a digest, then deletes everything. Touches nothing of yours.
 import fs from 'node:fs';
 import path from 'node:path';
 import { HOUR, MIN, cleanup, makeHome, makeRepo, runCli, tmpDir, writeSession } from '../test/helpers.js';
@@ -29,6 +29,7 @@ try {
       { command: 'npm test', exit: 1 },
       { command: 'npm test', exit: 1 },
     ],
+    final: "I couldn't get the redirect test green.\n\n## Next steps\n- Check the session cookie domain on staging\n- Should the lockfile bump stay in this branch?",
   });
   writeSession(projects, { id: 'bbbb2222-0000-4000-8000-000000000002', cwd: repo, gitBranch: 'add-search', start: now - 5 * HOUR, prompt: 'Add a search endpoint', bash: [{ command: 'npm test 2>&1 | tail -20', exit: 0 }] });
   writeSession(projects, { id: 'cccc3333-0000-4000-8000-000000000003', cwd: repo, start: now - 3 * HOUR, prompt: 'Create the users table migration' });
@@ -37,6 +38,9 @@ try {
   const { code, stdout, stderr } = runCli(['--since', '24h', '--repo', repo, '--out', outFile], { home });
   process.stdout.write(`$ dawnlog --since 24h --out dawnlog.md   (exit ${code})\n\n${stdout}${stderr}`);
   process.stdout.write(`\n----- dawnlog.md -----\n\n${fs.readFileSync(outFile, 'utf8')}`);
+  const digestFile = path.join(tmpDir('demo-out'), 'digest.txt');
+  const digest = runCli(['digest', '--since', '24h', '--repo', repo, '--out', digestFile], { home });
+  process.stdout.write(`\n----- dawnlog digest --out digest.txt (exit ${digest.code}) -----\n\n${fs.readFileSync(digestFile, 'utf8')}`);
 } finally {
   cleanup();
 }

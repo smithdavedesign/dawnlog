@@ -104,7 +104,7 @@ describe('M1 fixture: 3 sessions, 3 branches', () => {
 
   test('exit 3: repeating the same failing command 3 times reports retries: 2', () => {
     const failed = receiptBlocks(out.stdout).find((r) => r.branch === 'fix-login');
-    assert.match(failed.text, /^\s*retries: 2$/m);
+    assert.match(failed.text, /^\s*retries: 2(?: · L\d+)?$/m);
   });
 
   test('exit 4: package-lock.json sets risk: dependency, migrations/ sets risk: data', () => {

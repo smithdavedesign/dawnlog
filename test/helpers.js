@@ -76,6 +76,14 @@ export function addWorktree(repo, branch) {
 }
 
 /**
+ * Claude Code-style session log text (records one minute apart): see writeSession for the spec.
+ * `edits` adds Edit tool calls; a bash entry with `denied: true` gets the permission-refused result.
+ */
+export function sessionJsonl(spec) {
+  return sessionRecords(spec).map((r) => JSON.stringify(r)).join('\n') + '\n';
+}
+
+/**
  * Writes a Claude Code-style session log (records one minute apart) and returns its path.
  * Bash results carry both shapes seen in real logs: tool_result.is_error with an
  * "Exit code N" prefix, and toolUseResult.exitCode.
@@ -84,6 +92,15 @@ export function addWorktree(repo, branch) {
  *   bash?: { command: string, exit: number, output?: string }[], final?: string, mtime?: number }} spec
  */
 export function writeSession(projectsDir, spec) {
+  const dir = path.join(projectsDir, spec.cwd.replace(/[^A-Za-z0-9]/g, '-'));
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, `${spec.id}.jsonl`);
+  fs.writeFileSync(file, sessionJsonl(spec));
+  if (spec.mtime !== undefined) fs.utimesSync(file, spec.mtime / 1000, spec.mtime / 1000);
+  return file;
+}
+
+function sessionRecords(spec) {
   const records = [];
   let t = spec.start;
   const branchAt = (i) => (Array.isArray(spec.gitBranch) ? spec.gitBranch[Math.min(i, spec.gitBranch.length - 1)] : spec.gitBranch);
@@ -103,6 +120,13 @@ export function writeSession(projectsDir, spec) {
     return record;
   };
   records.push({ type: 'user', ...common(), message: { role: 'user', content: spec.prompt } });
+  (spec.edits ?? []).forEach((filePath, i) => {
+    records.push({
+      type: 'assistant',
+      ...common(),
+      message: { role: 'assistant', content: [{ type: 'tool_use', id: `toolu_edit_${i}`, name: 'Edit', input: { file_path: filePath, old_string: 'a', new_string: 'b' } }] },
+    });
+  });
   (spec.bash ?? []).forEach((run, i) => {
     const id = `toolu_${spec.id.slice(0, 4)}_${i}`;
     records.push({
@@ -116,6 +140,15 @@ export function writeSession(projectsDir, spec) {
         ],
       },
     });
+    if (run.denied) {
+      records.push({
+        type: 'user',
+        ...common(),
+        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, is_error: true, content: "The user doesn't want to proceed with this tool use." }] },
+        toolUseResult: 'Error: The user doesn\'t want to proceed with this tool use.',
+      });
+      return;
+    }
     const failed = run.exit !== 0;
     const output = run.output ?? (failed ? 'Tests: 1 failed, 4 passed' : 'Tests: 5 passed');
     records.push({
@@ -129,12 +162,36 @@ export function writeSession(projectsDir, spec) {
     });
   });
   records.push({ type: 'assistant', ...common(), message: { role: 'assistant', content: [{ type: 'text', text: spec.final ?? 'Done.' }] } });
-  const dir = path.join(projectsDir, spec.cwd.replace(/[^A-Za-z0-9]/g, '-'));
-  fs.mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, `${spec.id}.jsonl`);
-  fs.writeFileSync(file, records.map((r) => JSON.stringify(r)).join('\n') + '\n');
-  if (spec.mtime !== undefined) fs.utimesSync(file, spec.mtime / 1000, spec.mtime / 1000);
-  return file;
+  return records;
+}
+
+/**
+ * Adds Entire's metadata branch (entire/checkpoints/v1) to `repo`, one folder per checkpoint.
+ * @param {{ id: string, sessions: { session_id: string, branch?: string, created_at?: string, agent?: string,
+ *   transcript?: string, raw?: string }[] }[]} checkpoints  raw: metadata.json text, to test bad JSON
+ */
+export function addEntireCheckpoints(repo, checkpoints, at = Date.now()) {
+  git(repo, ['checkout', '-q', '--orphan', 'entire/checkpoints/v1']);
+  git(repo, ['rm', '-rfq', '--cached', '.']);
+  for (const entry of fs.readdirSync(repo)) if (entry !== '.git') fs.rmSync(path.join(repo, entry), { recursive: true, force: true });
+  for (const cp of checkpoints) {
+    const dir = path.join(repo, cp.id.slice(0, 2), cp.id.slice(2));
+    fs.mkdirSync(dir, { recursive: true });
+    const refs = cp.sessions.map((_, i) => ({ metadata: `/${cp.id.slice(0, 2)}/${cp.id.slice(2)}/${i}/metadata.json`, transcript: `/${cp.id.slice(0, 2)}/${cp.id.slice(2)}/${i}/full.jsonl` }));
+    fs.writeFileSync(path.join(dir, 'metadata.json'), JSON.stringify({ checkpoint_id: cp.id, strategy: 'manual-commit', sessions: refs }));
+    cp.sessions.forEach((s, i) => {
+      const sessionDir = path.join(dir, String(i));
+      fs.mkdirSync(sessionDir, { recursive: true });
+      const { transcript, raw, ...meta } = s;
+      fs.writeFileSync(path.join(sessionDir, 'metadata.json'), raw ?? JSON.stringify({ cli_version: '0.10.1', checkpoint_id: cp.id, agent: 'Claude Code', ...meta }));
+      if (transcript !== undefined) fs.writeFileSync(path.join(sessionDir, 'full.jsonl'), transcript);
+      fs.writeFileSync(path.join(sessionDir, 'prompt.txt'), 'prompt\n');
+    });
+  }
+  git(repo, ['add', '-A']);
+  git(repo, ['commit', '-q', '-m', 'Checkpoints'], at);
+  git(repo, ['checkout', '-q', '-f', 'main']);
+  git(repo, ['clean', '-fdq']);
 }
 
 /** A fake home directory with an empty ~/.claude/projects. */
@@ -145,13 +202,14 @@ export function makeHome() {
   return { home, projects };
 }
 
-/** Runs bin/dawnlog.js as a subprocess with a fake HOME. */
-export function runCli(args, { home, cwd, env = {} } = {}) {
+/** Runs bin/dawnlog.js as a subprocess with a fake HOME. `node` adds Node flags (e.g. --import). */
+export function runCli(args, { home, cwd, env = {}, node = [] } = {}) {
   const childEnv = { ...process.env, ...GIT_ENV, HOME: home };
   delete childEnv.CLAUDE_CONFIG_DIR;
   delete childEnv.NODE_TEST_CONTEXT;
+  delete childEnv.DAWNLOG_CLAUDE;
   Object.assign(childEnv, env);
-  const result = spawnSync(process.execPath, [BIN, ...args], { cwd: cwd ?? home, env: childEnv, encoding: 'utf8' });
+  const result = spawnSync(process.execPath, [...node, BIN, ...args], { cwd: cwd ?? home, env: childEnv, encoding: 'utf8' });
   return { code: result.status, stdout: result.stdout, stderr: result.stderr };
 }
 
@@ -163,7 +221,8 @@ export function receiptBlocks(stdout) {
     .map((block) => {
       const head = /^\[(\d+)\] (.+) — (FAILED|UNVERIFIED|PASSED)$/m.exec(block);
       if (!head) throw new Error(`unrecognised receipt header:\n${block}`);
-      return { rank: Number(head[1]), branch: head[2], status: head[3], text: block };
+      const action = /^\s*suggest: (merge|fix|kill) — /m.exec(block)?.[1] ?? null;
+      return { rank: Number(head[1]), branch: head[2], status: head[3], action, text: block };
     });
 }
 
