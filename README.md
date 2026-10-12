@@ -121,6 +121,8 @@ Example crontab entry. Note that `%` must be escaped in crontab. Sending is up t
 30 7 * * * cd ~ && dawnlog digest --since 12h --repo ~/code/app --repo ~/code/site --out ~/.dawnlog/digest.txt --quiet && openclaw message send --channel whatsapp --target "+1…" --message "$(cat ~/.dawnlog/digest.txt)"
 ```
 
+`scripts/morning-digest.sh` wraps this for launchd or cron. It skips anything in the list that isn't a git repo. It sends the digest to WhatsApp through `openclaw message send` only when a branch needs triage, so quiet mornings send nothing. It is configured with environment variables, listed at the top of the script. On macOS, launchd jobs can't read `~/Documents`, so point it at checkouts outside it.
+
 ### Summaries (`--summarize`)
 
 For each receipt, dawnlog runs `claude -p --output-format text --no-session-persistence --tools ""` in a temp directory. It sends the receipt's facts and the agent's final message on stdin, both secret-redacted first.
@@ -150,7 +152,7 @@ If the repo has [Entire](https://entire.io)'s metadata branch (`entire/checkpoin
 ## Development
 
 ```sh
-npm test        # 225 tests (node:test, no installs), ~6 s
+npm test        # 228 tests (node:test, no installs), ~6 s
 UPDATE_GOLDEN=1 node --test test/m2.test.js   # after an intended ranking change; review the diff of test/golden/ranking.txt
 ```
 
