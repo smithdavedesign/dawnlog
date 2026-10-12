@@ -7,7 +7,7 @@ For developers who let Claude Code run unattended, it reads the session logs alr
 - [Roadmap](ROADMAP.md): M1–M3, all done
 - [Build notes](BUILD.md): decisions, architecture, test plan, what's left
 
-Effort: Low · Confidence: Medium
+Effort: Low · Confidence: Medium · License: [MIT](LICENSE)
 
 _Researched by the idea pipeline on 2026-10-10 ([original record](https://github.com/smithdavedesign/idea-factory/tree/main/ideas/dawnlog)); repo created on David's go-ahead 2026-10-11._
 

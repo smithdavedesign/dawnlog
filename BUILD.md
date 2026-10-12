@@ -298,7 +298,8 @@ All 225 tests pass (`npm test`, about 6 s).
 - Windows is untested.
 
 **Packaging (owner decisions):**
-- A license, then `npm publish` or making the repo public for `npx github:…`.
+- License: MIT (added 2026-10-11). The bin's exec bit is set in git.
+- **The npm name `dawnlog` is taken** by an unrelated standup-report CLI (yyalim/dawnlog). Publish under another name (`dawnlog-cli` and `@smithdavedesign/dawnlog` were free on 2026-10-11), or make the repo public and use `npx github:smithdavedesign/dawnlog`.
 - An optional GitHub Actions test workflow.
 
 ## Review
