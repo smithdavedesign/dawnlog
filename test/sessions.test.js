@@ -318,3 +318,61 @@ describe('projectsDir', () => {
     assert.equal(projectsDir({ HOME: '/home/dev', CLAUDE_CONFIG_DIR: '/cfg' }), path.join('/cfg', 'projects'));
   });
 });
+
+describe('M2 facts: line numbers, final message, edits, denied runs', () => {
+  const said = (minutes, text, extra) => ({ type: 'assistant', ...base(minutes, extra), message: { role: 'assistant', content: [{ type: 'text', text }] } });
+  const edit = (minutes, name, filePath) => ({
+    type: 'assistant',
+    ...base(minutes),
+    message: { role: 'assistant', content: [{ type: 'tool_use', id: `e${minutes}`, name, input: { file_path: filePath } }] },
+  });
+
+  test('task, runs and the retry carry the 1-based line they were read from (blank lines counted)', () => {
+    const s = parseSession(
+      jsonl(
+        { type: 'summary', summary: 'x' },
+        prompt(0, 'Fix it'),
+        bash(1, 't1', 'npm test'),
+        result(2, 't1', { isError: true, content: 'Exit code 1' }),
+      ) +
+        '\n' +
+        jsonl(bash(3, 't2', 'npm test'), result(4, 't2', { isError: true, content: 'Exit code 1' })),
+      '/p/s-1.jsonl',
+    );
+    assert.equal(s.taskLine, 2);
+    assert.deepEqual(s.runs.map((r) => r.line), [3, 6]);
+    assert.ok(s.runs.every((r) => r.file === '/p/s-1.jsonl'));
+    assert.equal(s.firstRetryLine, 6);
+  });
+
+  test('the line where each branch was last recorded', () => {
+    const s = parse(prompt(0, 'go', { gitBranch: 'main' }), prompt(1, 'x', { gitBranch: 'feat' }), prompt(2, 'y', { gitBranch: 'feat' }));
+    assert.deepEqual(s.branchLines, { main: 1, feat: 3 });
+  });
+
+  test('final message: the last assistant text, not a subagent sidechain', () => {
+    const s = parse(prompt(0, 'go'), said(1, 'First.'), said(2, 'Done. Next steps: none'), said(3, 'sub-agent chatter', { isSidechain: true }));
+    assert.equal(s.finalText, 'Done. Next steps: none');
+    assert.equal(s.finalLine, 3);
+  });
+
+  test('files the agent edited or wrote', () => {
+    const s = parse(prompt(0, 'go'), edit(1, 'Edit', '/r/a.js'), edit(2, 'Write', '/r/b.js'), edit(3, 'Read', '/r/c.js'), edit(4, 'Edit', '/r/a.js'));
+    assert.deepEqual(s.edited, ['/r/a.js', '/r/b.js']);
+  });
+
+  test('a denied run (permission refused) never ran: not a failure, not a retry, not the verdict', () => {
+    const s = parse(
+      prompt(0, 'go'),
+      bash(1, 't1', 'npm test'),
+      result(2, 't1', { content: 'ok', toolUseResult: { exitCode: 0 } }),
+      bash(3, 't2', 'npm test'),
+      result(4, 't2', { isError: true, content: "The user doesn't want to proceed with this tool use." }),
+      bash(5, 't3', 'npm test'),
+      { ...result(6, 't3', { isError: true, content: 'Denied by policy' }), toolDenialKind: 'rule' },
+    );
+    assert.deepEqual(s.runs.map((r) => r.denied), [false, true, true]);
+    assert.equal(verdict(s.runs).status, 'PASSED');
+    assert.equal(s.retries, 0);
+  });
+});

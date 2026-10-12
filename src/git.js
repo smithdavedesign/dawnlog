@@ -73,16 +73,69 @@ export function listWorktrees(repo) {
   return worktrees;
 }
 
-/** Commits on `branch` that are not on `base`, newest first. */
+/**
+ * Commits on `branch` that are not on `base`, newest first, with any Entire-Checkpoint trailers.
+ * @returns {{ sha: string, at: number, subject: string, checkpoints: string[] }[]}
+ */
 export function branchCommits(repo, base, branch) {
-  const out = git(repo, ['log', '--format=%H%x1f%ct%x1f%s', `${HEADS}${base}..${HEADS}${branch}`, '--']);
+  const format = '--format=%H%x1f%ct%x1f%(trailers:key=Entire-Checkpoint,valueonly,separator=%x2C)%x1f%s';
+  const out = git(repo, ['log', format, `${HEADS}${base}..${HEADS}${branch}`, '--']);
   return out
     .split('\n')
     .filter(Boolean)
     .map((line) => {
-      const [sha, time, ...subject] = line.split('\x1f');
-      return { sha, at: Number(time) * 1000, subject: subject.join('\x1f') };
+      const [sha, time, trailers, ...subject] = line.split('\x1f');
+      const checkpoints = trailers
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean);
+      return { sha, at: Number(time) * 1000, subject: subject.join('\x1f'), checkpoints };
     });
+}
+
+/** The full ref name if `ref` resolves to a commit, else null. */
+export function resolveRef(repo, refs) {
+  for (const ref of refs) {
+    try {
+      git(repo, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
+      return ref;
+    } catch {
+      // try the next one
+    }
+  }
+  return null;
+}
+
+/** Every file path in the tree of `ref`. */
+export function listTree(repo, ref) {
+  return git(repo, ['ls-tree', '-r', '-z', '--name-only', ref, '--'])
+    .split('\0')
+    .filter(Boolean);
+}
+
+/**
+ * Contents of several `ref:path` blobs in one git call.
+ * @returns {Map<string, string>} path → contents (missing paths are left out)
+ */
+export function readBlobs(repo, ref, paths) {
+  const blobs = new Map();
+  if (!paths.length) return blobs;
+  const out = execFileSync('git', ['-C', repo, 'cat-file', '--batch'], {
+    input: paths.map((p) => `${ref}:${p}`).join('\n') + '\n',
+    stdio: ['pipe', 'pipe', 'pipe'],
+    maxBuffer: 1024 * 1024 * 1024,
+  });
+  let at = 0;
+  for (const p of paths) {
+    const headerEnd = out.indexOf(10, at);
+    const header = out.subarray(at, headerEnd).toString('utf8');
+    at = headerEnd + 1;
+    const size = /^\S+ blob (\d+)$/.exec(header);
+    if (!size) continue; // "<ref:path> missing"
+    blobs.set(p, out.subarray(at, at + Number(size[1])).toString('utf8'));
+    at += Number(size[1]) + 1;
+  }
+  return blobs;
 }
 
 /**
@@ -106,4 +159,40 @@ export function branchFiles(repo, base, branch) {
       // Binary files report "-" for both counts.
       return { path: file.join('\t'), added: Number(added) || 0, deleted: Number(deleted) || 0 };
     });
+}
+
+function patchIds(repo, patch) {
+  if (!patch.trim()) return [];
+  const out = execFileSync('git', ['-C', repo, 'patch-id', '--stable'], { input: patch, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 256 * 1024 * 1024 });
+  return out
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => line.split(' ')[0]);
+}
+
+/**
+ * Has `branch` already landed in `base` by a squash or rebase merge, which leaves the branch's own
+ * commits looking unmerged? True when every file it changed is identical in base, or when its
+ * whole diff has the same patch-id as one commit on base since they split (a clean squash).
+ */
+// Keeps the pathspec list well under ARG_MAX; bigger branches go straight to the patch-id check.
+const MAX_PATHSPECS = 1000;
+// How far back on base to look for the squash commit.
+const MAX_BASE_COMMITS = 2000;
+
+export function landedInBase(repo, base, branch, paths) {
+  if (!paths.length) return false;
+  if (paths.length <= MAX_PATHSPECS) {
+    try {
+      git(repo, ['diff', '--quiet', `${HEADS}${base}`, `${HEADS}${branch}`, '--', ...paths.map((p) => `:(literal)${p}`)]);
+      return true;
+    } catch (err) {
+      if (err.status !== 1) throw err;
+    }
+  }
+  const mergeBase = git(repo, ['merge-base', `${HEADS}${base}`, `${HEADS}${branch}`]).trim();
+  const [branchId] = patchIds(repo, git(repo, ['diff', mergeBase, `${HEADS}${branch}`, '--']));
+  if (!branchId) return false;
+  const log = git(repo, ['log', '-p', '--no-merges', `--max-count=${MAX_BASE_COMMITS}`, '--format=commit %H', `${mergeBase}..${HEADS}${base}`, '--']);
+  return patchIds(repo, log).includes(branchId);
 }

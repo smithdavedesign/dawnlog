@@ -6,18 +6,24 @@
 //   assistant     message.content[] { type: 'tool_use', id, name: 'Bash', input.command }
 //   user          message.content: string | blocks; { type: 'tool_result', tool_use_id, is_error, content }
 //                 toolUseResult { exitCode?, interrupted?, stdout?, stderr? } (or a plain string)
-// Subagent transcripts (<session-id>/subagents/*.jsonl) are not read in M1.
+//   assistant     message.content[] { type: 'text', text } (the last one is the agent's final message)
+//                 message.content[] { type: 'tool_use', name: 'Edit' | 'Write' | …, input.file_path }
+//   user          toolDenialKind, or a tool_result starting "The user doesn't want to proceed": a denied run
+// Line numbers are 1-based and kept on every fact, so each receipt field can cite file:line.
+// Subagent transcripts (<session-id>/subagents/*.jsonl) are not read.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
 /**
- * @typedef {{ command: string, at: number, test: boolean, masked: boolean,
- *   exitCode: number | null, ok: boolean | null, done: boolean }} Run
+ * @typedef {{ command: string, at: number, test: boolean, masked: boolean, exitCode: number | null,
+ *   ok: boolean | null, done: boolean, denied: boolean, line: number, file: string }} Run
  *   ok: true passed, false failed, null unknown (no result yet, or exit code masked by a pipe)
- * @typedef {{ id: string, file: string, cwds: string[], branches: string[], start: number | null,
- *   end: number | null, task: string, runs: Run[], retries: number, records: number,
- *   unreadableLines: number }} Session
+ *   denied: the user (or a permission rule) refused it, so it never ran
+ * @typedef {{ id: string, file: string, cwds: string[], branches: string[], branchLines: Record<string, number>,
+ *   start: number | null, end: number | null, task: string, taskLine: number | null, runs: Run[],
+ *   retries: number, firstRetryLine: number | null, finalText: string, finalLine: number | null,
+ *   edited: string[], records: number, unreadableLines: number }} Session
  */
 
 export function projectsDir(env = process.env) {
@@ -116,7 +122,14 @@ function blockText(content) {
   return '';
 }
 
-function settle(run, block, toolUseResult) {
+const DENIED = /^\s*(?:The user doesn't want to proceed|Permission to use \S+ (?:has been|was) denied)/;
+
+function settle(run, block, toolUseResult, record) {
+  if (record?.toolDenialKind || DENIED.test(blockText(block.content))) {
+    run.done = true;
+    run.denied = true;
+    return;
+  }
   const structured = toolUseResult && typeof toolUseResult === 'object' ? toolUseResult : {};
   const text = [blockText(block.content), typeof toolUseResult === 'string' ? toolUseResult : '', structured.stdout ?? '', structured.stderr ?? ''].join('\n');
   let code = Number.isInteger(structured.exitCode) ? structured.exitCode : null;
@@ -154,16 +167,26 @@ function promptOf(record) {
 
 const normalise = (command) => command.trim().replace(/\s+/g, ' ');
 
-/** A retry is a re-run of a command whose previous run of the same command failed. */
-export function countRetries(runs) {
+/** Retries (re-runs of a command whose previous run of the same command failed) and the first one. */
+export function findRetries(runs) {
   const lastFailed = new Map();
-  let retries = 0;
+  let count = 0;
+  let first = null;
   for (const run of runs) {
+    if (run.denied) continue;
     const key = normalise(run.command);
-    if (lastFailed.get(key)) retries++;
+    if (lastFailed.get(key)) {
+      count++;
+      first ??= run;
+    }
     lastFailed.set(key, run.ok === false);
   }
-  return retries;
+  return { count, first };
+}
+
+/** A retry is a re-run of a command whose previous run of the same command failed. */
+export function countRetries(runs) {
+  return findRetries(runs).count;
 }
 
 /**
@@ -171,7 +194,7 @@ export function countRetries(runs) {
  * @returns {{ status: 'FAILED' | 'UNVERIFIED' | 'PASSED', run: Run | null }}
  */
 export function verdict(runs) {
-  const run = runs.filter((r) => r.test).at(-1) ?? null;
+  const run = runs.filter((r) => r.test && !r.denied).at(-1) ?? null;
   if (!run || run.ok === null) return { status: 'UNVERIFIED', run };
   return { status: run.ok ? 'PASSED' : 'FAILED', run };
 }
@@ -183,21 +206,30 @@ export function parseSession(text, file) {
     file,
     cwds: [],
     branches: [],
+    branchLines: {},
     start: null,
     end: null,
     task: '',
+    taskLine: null,
     runs: [],
     retries: 0,
+    firstRetryLine: null,
+    finalText: '',
+    finalLine: null,
+    edited: [],
     records: 0,
     unreadableLines: 0,
   };
   const cwds = new Set();
   const branches = new Map(); // insertion order = last appearance
   const pending = new Map();
+  const edited = new Set();
   let sessionId = null;
   let lastAt = null;
+  let lineNo = 0;
 
   for (const line of text.split('\n')) {
+    lineNo++;
     if (!line.trim()) continue;
     let record;
     try {
@@ -222,13 +254,24 @@ export function parseSession(text, file) {
     if (typeof record.gitBranch === 'string' && record.gitBranch && record.gitBranch !== 'HEAD') {
       branches.delete(record.gitBranch);
       branches.set(record.gitBranch, true);
+      session.branchLines[record.gitBranch] = lineNo;
     }
     const content = record.message?.content;
-    if (record.type === 'assistant' && Array.isArray(content)) {
+    if (record.type === 'assistant' && Array.isArray(content) && !record.isSidechain) {
+      const said = content
+        .filter((b) => b?.type === 'text' && typeof b.text === 'string')
+        .map((b) => b.text)
+        .join('\n');
+      if (said.trim()) {
+        session.finalText = said;
+        session.finalLine = lineNo;
+      }
       for (const block of content) {
-        if (block?.type !== 'tool_use' || block.name !== 'Bash' || typeof block.input?.command !== 'string') continue;
+        if (block?.type !== 'tool_use') continue;
+        if (typeof block.input?.file_path === 'string' && /^(?:Edit|MultiEdit|Write|NotebookEdit)$/.test(block.name)) edited.add(block.input.file_path);
+        if (block.name !== 'Bash' || typeof block.input?.command !== 'string') continue;
         const { test, masked } = classifyCommand(block.input.command);
-        const run = { command: block.input.command, at: lastAt ?? 0, test, masked, exitCode: null, ok: null, done: false };
+        const run = { command: block.input.command, at: lastAt ?? 0, test, masked, exitCode: null, ok: null, done: false, denied: false, line: lineNo, file };
         session.runs.push(run);
         pending.set(block.id, run);
       }
@@ -238,16 +281,22 @@ export function parseSession(text, file) {
         const run = pending.get(block.tool_use_id);
         if (!run) continue;
         pending.delete(block.tool_use_id);
-        settle(run, block, results.length === 1 ? record.toolUseResult : undefined);
+        settle(run, block, results.length === 1 ? record.toolUseResult : undefined, record);
       }
-      if (!session.task) session.task = promptOf(record) ?? '';
+      if (!session.task) {
+        session.task = promptOf(record) ?? '';
+        if (session.task) session.taskLine = lineNo;
+      }
     }
   }
 
   if (sessionId) session.id = sessionId;
   session.cwds = [...cwds];
   session.branches = [...branches.keys()];
-  session.retries = countRetries(session.runs);
+  session.edited = [...edited];
+  const retries = findRetries(session.runs);
+  session.retries = retries.count;
+  session.firstRetryLine = retries.first?.line ?? null;
   return session;
 }
 

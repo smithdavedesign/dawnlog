@@ -1,0 +1,196 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/smithdavedesign/dawnlog/blob/main/schema/receipts.schema.json",
+  "title": "dawnlog receipts (dawnlog --json)",
+  "description": "Version 1. Transcript-derived fields cite their source as `file:line` in `sources`; git-derived fields cite `git:<base>...<branch>`; null means there is nothing to point at.",
+  "type": "object",
+  "required": ["dawnlog", "repo", "base", "since", "window", "counts", "receipts", "unmatched", "entire", "notes"],
+  "additionalProperties": false,
+  "properties": {
+    "dawnlog": { "const": 1 },
+    "repo": { "type": "string" },
+    "base": { "type": "string" },
+    "since": { "type": "string", "format": "date-time" },
+    "window": { "type": "string" },
+    "counts": {
+      "type": "object",
+      "required": ["receipts", "sessions", "unmatched", "otherProjectSessions", "unreadableLines", "emptyFiles", "mergedBranches"],
+      "additionalProperties": false,
+      "properties": {
+        "receipts": { "type": "integer", "minimum": 0 },
+        "sessions": { "type": "integer", "minimum": 0 },
+        "unmatched": { "type": "integer", "minimum": 0 },
+        "otherProjectSessions": { "type": "integer", "minimum": 0 },
+        "unreadableLines": { "type": "integer", "minimum": 0 },
+        "emptyFiles": { "type": "integer", "minimum": 0 },
+        "mergedBranches": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "receipts": { "type": "array", "items": { "$ref": "#/$defs/receipt" } },
+    "unmatched": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "file", "reason", "task", "source"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "file": { "type": "string" },
+          "reason": { "type": "string" },
+          "task": { "type": "string" },
+          "source": { "$ref": "#/$defs/lineSource" }
+        }
+      }
+    },
+    "entire": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["ref"],
+          "additionalProperties": false,
+          "properties": {
+            "ref": { "type": ["string", "null"] },
+            "refBackend": { "type": "boolean" },
+            "sessions": { "type": "integer", "minimum": 0 },
+            "remoteSessions": { "type": "integer", "minimum": 0 },
+            "unreadable": { "type": "integer", "minimum": 0 }
+          }
+        }
+      ]
+    },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "lineSource": {
+      "description": "A transcript line: `<file>:<line>` (file may be `entire:<checkpoint>/<n>/full.jsonl`).",
+      "anyOf": [{ "type": "null" }, { "type": "string", "pattern": "^.+:[1-9][0-9]*$" }]
+    },
+    "anySource": {
+      "anyOf": [{ "type": "null" }, { "type": "string", "pattern": "^(?:git:.+|.+:[1-9][0-9]*)$" }]
+    },
+    "receipt": {
+      "type": "object",
+      "required": [
+        "rank", "branch", "status", "suggestion", "summary", "task", "sessions", "tests", "commits", "files",
+        "added", "deleted", "retries", "risk", "area", "outside", "deferred", "sources"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "rank": { "type": "integer", "minimum": 1 },
+        "branch": { "type": "string" },
+        "status": { "enum": ["FAILED", "UNVERIFIED", "PASSED"] },
+        "suggestion": {
+          "type": "object",
+          "required": ["action", "reason"],
+          "additionalProperties": false,
+          "properties": { "action": { "enum": ["merge", "fix", "kill"] }, "reason": { "type": "string" } }
+        },
+        "summary": { "type": ["string", "null"] },
+        "task": { "type": "string" },
+        "sessions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "file", "via", "source"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "file": { "type": "string" },
+              "via": { "enum": ["entire", "gitBranch", "worktree", "commit times"] },
+              "source": { "$ref": "#/$defs/anySource" }
+            }
+          }
+        },
+        "tests": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "required": ["command", "exitCode", "ok", "masked", "done", "source"],
+              "additionalProperties": false,
+              "properties": {
+                "command": { "type": "string" },
+                "exitCode": { "type": ["integer", "null"] },
+                "ok": { "type": ["boolean", "null"] },
+                "masked": { "type": "boolean" },
+                "done": { "type": "boolean" },
+                "source": { "$ref": "#/$defs/lineSource" }
+              }
+            }
+          ]
+        },
+        "commits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["sha", "at", "subject", "checkpoints"],
+            "additionalProperties": false,
+            "properties": {
+              "sha": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+              "at": { "type": "string", "format": "date-time" },
+              "subject": { "type": "string" },
+              "checkpoints": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
+        "files": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["path", "added", "deleted"],
+                "additionalProperties": false,
+                "properties": {
+                  "path": { "type": "string" },
+                  "added": { "type": "integer", "minimum": 0 },
+                  "deleted": { "type": "integer", "minimum": 0 }
+                }
+              }
+            }
+          ]
+        },
+        "added": { "type": "integer", "minimum": 0 },
+        "deleted": { "type": "integer", "minimum": 0 },
+        "retries": { "type": "integer", "minimum": 0 },
+        "risk": { "type": "array", "items": { "enum": ["dependency", "data", "auth", "payments"] } },
+        "area": { "type": "array", "items": { "type": "string" } },
+        "outside": { "type": "array", "items": { "type": "string" } },
+        "deferred": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["text", "kind", "source"],
+            "additionalProperties": false,
+            "properties": {
+              "text": { "type": "string" },
+              "kind": { "enum": ["deferred", "question"] },
+              "source": { "$ref": "#/$defs/lineSource" }
+            }
+          }
+        },
+        "sources": {
+          "type": "object",
+          "required": ["branch", "status", "tests", "task", "sessions", "commits", "files", "retries", "risk", "outside", "deferred", "suggestion"],
+          "additionalProperties": false,
+          "properties": {
+            "branch": { "$ref": "#/$defs/anySource" },
+            "status": { "$ref": "#/$defs/lineSource" },
+            "tests": { "$ref": "#/$defs/lineSource" },
+            "task": { "$ref": "#/$defs/lineSource" },
+            "sessions": { "anyOf": [{ "type": "null" }, { "type": "array", "items": { "$ref": "#/$defs/anySource" } }] },
+            "commits": { "$ref": "#/$defs/anySource" },
+            "files": { "$ref": "#/$defs/anySource" },
+            "retries": { "$ref": "#/$defs/lineSource" },
+            "risk": { "$ref": "#/$defs/anySource" },
+            "outside": { "$ref": "#/$defs/anySource" },
+            "deferred": { "$ref": "#/$defs/lineSource" },
+            "suggestion": { "$ref": "#/$defs/anySource" }
+          }
+        }
+      }
+    }
+  }
+}
