@@ -3,6 +3,10 @@
   "version": "0.3.0",
   "description": "Morning triage receipts for overnight Claude Code runs: one receipt per git branch, built from the session logs already on disk.",
   "license": "MIT",
+  "funding": {
+    "type": "individual",
+    "url": "https://github.com/smithdavedesign/overnight-receipts#pro"
+  },
   "type": "module",
   "bin": {
     "overnight-receipts": "bin/overnight-receipts.js"
@@ -18,7 +22,10 @@
   },
   "scripts": {
     "test": "node --test \"test/*.test.js\"",
-    "demo": "node scripts/demo.js"
+    "demo": "node scripts/demo.js",
+    "site:build": "node site/build.js",
+    "site:preview": "node site/build.js && node site/serve.js",
+    "screenshots": "node scripts/screenshots.mjs"
   },
   "keywords": [
     "claude-code",
@@ -26,5 +33,8 @@
     "git",
     "cli",
     "triage"
-  ]
+  ],
+  "devDependencies": {
+    "playwright-core": "^1.64.0"
+  }
 }

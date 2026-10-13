@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>overnight-receipts: what did your agent do overnight?</title>
+<meta name="description" content="Morning triage receipts for overnight Claude Code runs: one receipt per git branch, from the session logs already on your disk. Free, MIT, local and read-only.">
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="index.html">overnight-receipts</a>
+  <nav><a href="#pro">Pro</a> <a href="{{REPO_URL}}">GitHub</a></nav>
+</header>
+<main>
+  <section class="hero">
+    <div class="pitch">
+      <h1>What did your agent do overnight?</h1>
+      <p class="lede">One receipt per git branch, built from the Claude Code session logs already on your disk. Each says what the agent was asked, whether its last test run passed, how often it retried, which risky files it touched and what it left for you. Ranked worst first, with a <strong>merge</strong>, <strong>fix</strong> or <strong>kill</strong> suggestion.</p>
+      <pre class="cmd"><code>{{INSTALL}}</code></pre>
+      <p class="note">Free and MIT. Runs on your machine, read-only and offline. No hooks to install, no account, nothing uploaded.</p>
+    </div>
+    <pre class="terminal" aria-label="A sample run"><code>$ overnight-receipts --since 12h
+3 receipts · 3 sessions
+
+[1] fix-login — FAILED
+    suggest: fix — the last test run failed
+    task: Fix the login loop. Key: [REDACTED] · L1
+    tests: npm test → exit 1 · L6
+    retries: 2 · L4
+    risk: dependency, auth
+    needs you (2):
+      - Check the session cookie domain · L8
+      - asked: Keep the lockfile bump? · L8
+
+[2] db-users — UNVERIFIED
+    suggest: fix — no test run on record
+    risk: data
+
+[3] add-search — PASSED
+    suggest: merge — tests pass</code></pre>
+  </section>
+
+  <section id="pro" class="pro">
+    <h2>Pro: {{PRICE}} once</h2>
+    <p>Everything on this page is free, and stays free. Pro is a supporter license for people it saves a morning or two; the money keeps the parser in step with each Claude Code release.</p>
+    {{BUY}}
+    <p class="fine">One payment of {{PRICE}} through Stripe, no subscription. Refunds within 30 days, no questions asked. By buying you accept the <a href="terms.html">terms</a>. The <a href="privacy.html">privacy policy</a> says what's collected (very little).</p>
+    <ul>
+      <li>The one-line Pro link at the end of each <code>--out</code> Markdown file goes away.</li>
+      <li>Nothing is locked: it's an honour system. After paying you get a license string for <code>{{LICENSE_ENV}}</code>, and the tool never checks it or sends it anywhere.</li>
+    </ul>
+  </section>
+
+  <section class="facts">
+    <h2>Why trust a receipt</h2>
+    <ul>
+      <li><strong>Every claim cites its transcript line</strong> (<code>· L6</code>), so you can check it instead of trusting it.</li>
+      <li><strong>Secrets are redacted</strong> in everything it prints or writes. That's best-effort, for 12 token formats.</li>
+      <li><strong>It never says merge without a passing test run.</strong> A test piped into <code>tail</code> is UNVERIFIED, not PASSED.</li>
+      <li><strong>Markdown, JSON and a cron digest</strong> for your phone: <code>--out</code>, <code>--json</code>, <code>digest</code>.</li>
+    </ul>
+  </section>
+</main>
+<footer class="foot">
+  <a href="terms.html">Terms</a> · <a href="privacy.html">Privacy</a> · <a href="{{REPO_URL}}">Source (MIT)</a>
+</footer>
+</body>
+</html>

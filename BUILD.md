@@ -1,10 +1,636 @@
-# BUILD — dawnlog M1–M3
+# BUILD — dawnlog (overnight-receipts)
 
-_Renamed from **dawnlog** to **overnight-receipts** on 2026-10-11 (the npm name was taken). Notes below were written under the old name; the command is now `overnight-receipts`, the env vars `OVERNIGHT_RECEIPTS_*`._
+_Renamed from **dawnlog** to **overnight-receipts** on 2026-10-11 (the npm name was taken). Older notes below were written under the old name; the command is now `overnight-receipts`, the env vars `OVERNIGHT_RECEIPTS_*`._
 
-M1 was built non-interactively by idea-build on 2026-10-11, and M2 and M3 were built the same day in a Claude Code session. The M1 notes below are kept as written. [M2 and M3](#m2-and-m3) follow them, and [What's left](#whats-left) is current.
+History:
+- M1 was built non-interactively by idea-build on 2026-10-11.
+- M2 and M3 were built the same day in a Claude Code session.
+- On 2026-10-13 an MVP run took M2 and then M3 again, this time with REVENUE.md as an input. The goal is a product that can take money at the end.
+
+The [Plan](#plan) below is for this run's M3 pass, the storefront. The M2 pass plan, the M1 plan and the first M2/M3 notes are kept as written further down.
 
 ## Plan
+
+**M3 pass of the MVP run (2026-10-13): the storefront.** This was planned non-interactively with gstack's Step 0, Architecture review and Test review. Nobody was available to answer questions, so each decision is written down here with its reason.
+
+### Step 0: Scope Challenge
+
+1. **What already solves each sub-problem?**
+   - ROADMAP's three M3 exit criteria are already built and green in `test/m3.test.js`: only `git` runs without `--summarize`, the digest is written, and Entire checkpoints are read. Nothing there needs rebuilding.
+   - What's left from REVENUE.md is what the M2 pass assigned to M3: a landing page, the Stripe checkout, terms and privacy, and what the buyer gets after paying (the license string).
+   - Existing code carries most of it:
+     - `src/pro.js` already owns the price (`PRO_PRICE`) and the license variable (`LICENSE_ENV`). The site reads both from there instead of restating them.
+     - The CLI already accepts any non-blank license, so the page after payment only has to hand over a string.
+     - `runCli` in `test/helpers.js` can prove the whole loop: the string from that page hides the CLI's footer.
+   - **[Layer 1]** Stripe does the checkout. A Payment Link is a hosted checkout page with no code. Its after-payment redirect can carry `{CHECKOUT_SESSION_ID}` (docs.stripe.com/payment-links/post-payment), so a static page can show a per-purchase license string without a server.
+   - **[Layer 1]** Vercel serves a static directory from `vercel.json` (`buildCommand`, `outputDirectory`, `headers`) on the free tier.
+2. **Minimum change set:**
+   - `site/pages/`: four static pages (landing, terms, privacy, thanks), one stylesheet, and a browser module of about 20 lines for the license line.
+   - `site/build.js`: fills in the price, the license variable and the Buy button (from `PRO_CHECKOUT_URL`), then writes `dist/`.
+   - `vercel.json`: the build command, the output directory and security headers.
+   - `.provision`: the Vercel project, plus requests to David for the Payment Link and (added during the build, see the search check) a Cloudflare Pages project.
+   - This run also requires screenshots: `scripts/screenshots.mjs`, `site/serve.js` (a local preview server the screenshots use), and `playwright-core` as a devDependency.
+3. **Complexity check:**
+   - New code: `site/build.js` (about 100 lines), `site/serve.js` (about 70), `site/pages/license.js` (about 20) and `scripts/screenshots.mjs`. That's 0 classes and one new service (a static site).
+   - The diff touches more than 8 files. Most of them are content (HTML, CSS, docs), not code.
+   - Two reductions were considered and rejected:
+     - **Drop `serve.js` and screenshot `file://` URLs.** ES modules don't load over `file://`, and the screenshots must come from an app answering on localhost. The server also sends `vercel.json`'s CSP, so the screenshots prove the CSP doesn't break the pages.
+     - **Drop the license script and put one fixed string in Stripe's confirmation message.** About 20 lines buys a string that maps to one payment. That's what manual refunds and "I lost my license" need while fulfilment is manual (REVENUE: manual for the first 10 sales).
+4. **Search check:**
+   - **[Layer 1]** Stripe Payment Links: `{CHECKOUT_SESSION_ID}` in the after-payment redirect. **Footgun, from the same docs:** a buyer may never reach the redirect page (closed tab, dropped connection). So the thanks page can't be the only way to get the string. The thanks page and the terms both say to reply to the Stripe receipt, and the maintainer looks the payment up in the dashboard. Webhooks would automate this, but they need a server and a signing secret, and REVENUE says to automate nothing before the tenth sale.
+   - **[Layer 1]** Vercel static deploys through `vercel.json`. **Footguns:**
+     - CSP keywords need single quotes inside the JSON string.
+     - Guides often add `'unsafe-inline'`. It isn't needed here, because the pages have no inline script or style (tested).
+   - **Found while writing the deploy notes: Vercel's free Hobby plan is "non-commercial personal use only".** Its fair-use guidelines count any deployment "used for the purpose of financial gain of anyone involved" as commercial, though asking for donations isn't. A $12 Stripe link qualifies, and Vercel Pro ($20/month) would break the $0 rule. **[Layer 1]** Cloudflare Pages' free plan allows commercial use (Cloudflare's self-serve agreement has no such restriction) and reads a `_headers` file from the output directory. **Decision:**
+     - The build also writes `dist/_headers`, generated from `vercel.json`'s rules, so there's one source for the headers.
+     - Vercel (`vercel project dawnlog`) hosts the pre-launch page and previews while checkout is off, so no money changes hands there.
+     - The live storefront with checkout goes on Cloudflare Pages: a `request` for David, and `PRO_CHECKOUT_URL` is set only there.
+     - Footgun: Pages serves `/thanks.html` at `/thanks`, so `_headers` gets both paths.
+   - **[Layer 1]** No static site generator. Four pages and a `replace` that fails on an unknown placeholder are less code than configuring one. The build keeps 0 dependencies: Vercel's install only fetches playwright-core, which downloads no browser.
+   - **[EUREKA]** The checkout URL is the "start charging" switch. REVENUE says not to charge until attribution is at least 90% on David's own runs. The Buy button exists only when `PRO_CHECKOUT_URL` is set in Vercel's env. So the gate is a config step David takes after that check, not a code change. Until then the page says "Checkout opens soon", never a dead link.
+5. **TODOS.md:** none exists. Follow-ups go to "What's left".
+6. **Completeness check:** the tests cover:
+   - both checkout states, plus a set-but-invalid value (the build fails without echoing it)
+   - every page's links and assets
+   - the legal commitments REVENUE lists
+   - the license string's validation, including injection attempts
+   - path traversal in the preview server
+   - the end-to-end loop: page → license → no CLI footer
+7. **Distribution check:** the new artifact is the static site. The host builds it from the repo on every push (Git integration), on a free tier: Vercel with `vercel.json` before launch, then Cloudflare Pages with `dist/_headers` once checkout is on. It isn't shipped in the npm package: `files` doesn't list `site/` (tested). There's no CI workflow, since Vercel does the build; that's in What's left, as before.
+
+### Scope
+
+**In (M3 pass):**
+- **Landing (`index.html`):**
+  - what it is
+  - the free install line
+  - a sample receipt
+  - what's free and what Pro is
+  - the Buy button, or "Checkout opens soon"
+  - terms and privacy links right under it
+- **Terms and privacy pages:**
+  - local only, read-only, nothing uploaded
+  - redaction is best-effort, and the software is provided as is
+  - 30-day refunds
+  - Stripe takes the payment, and Vercel hosts with standard logs
+  - no cookies or analytics
+  - it's an honour system, and how to get a lost license
+- **Thanks (`thanks.html?session_id=…`):** the license line `export OVERNIGHT_RECEIPTS_LICENSE="cs_…"`, or a fallback that says how to get it. The page is `noindex`.
+- **`PRO_CHECKOUT_URL`** (host env, on Cloudflare Pages only): only `https://buy.stripe.com/…` links are accepted.
+- **`vercel.json`** with security headers, the same headers as **`dist/_headers`** for Cloudflare Pages, and **`.provision`**.
+- **README `## Pro`:** describes the storefront. The live link is added at launch.
+
+**Deliberately not in this pass:**
+- **A server, webhooks, license checks or a license database.** REVENUE says to automate nothing before the tenth sale, and Pro is an honour system.
+- **Analytics or counting clicks.** The privacy page promises none. Stripe's dashboard counts payments. REVENUE's step 6 counting stays manual: GitHub stars and issues, npm downloads, Stripe payments.
+- **A custom domain.** It costs money, and `*.vercel.app` is free.
+- **Changing the CLI.** The footer still links to the README's `#pro`, which always exists. The storefront's URL isn't known until Vercel assigns it (`dawnlog.vercel.app` if that name is free). Hardcoding a guess would risk a dead link in every Markdown file. The launch checklist puts the live URL into the README.
+- **Stripe Tax, governing law, and the seller's legal name in the terms.** These are David's decisions and are on the launch checklist.
+- **Gating Pro features.** This was decided in the M2 pass.
+
+### Architecture
+
+```
+ CLI --out FILE.md ── footer link ──▶ README #pro ── (link added at launch) ──▶ storefront
+                                                                                │
+ site/pages/*.html ─┐                                                           ▼
+ src/pro.js ────────┼─▶ site/build.js ─▶ dist/  ── Vercel (vercel.json): pre-launch, checkout off
+   PRO_PRICE        │     {{PRICE}} {{LICENSE_ENV}} {{BUY}}  └ Cloudflare Pages (dist/_headers): live ─▶ index.html
+   LICENSE_ENV      │     fails on an unknown placeholder       same headers: CSP default-src 'self',
+ PRO_CHECKOUT_URL ──┘     and on a set-but-invalid URL;          no-referrer, nosniff       │ Buy (only if
+   (Pages env)            _headers generated from vercel.json                               │ PRO_CHECKOUT_URL)
+                                                                            ▼
+                                             buy.stripe.com Payment Link (David's Stripe account)
+                                                                            │ after payment: redirect to
+                                                                            ▼ thanks.html?session_id={CHECKOUT_SESSION_ID}
+                     license.js: session id ─(regex)─▶ textContent ─▶ export OVERNIGHT_RECEIPTS_LICENSE="cs_…"
+                                                                            │ buyer pastes it in a shell profile
+                                                                            ▼
+                                                 CLI: proFooter(env) is null, so no footer
+ local: site/serve.js dist/ (127.0.0.1, same headers as vercel.json) ◀── scripts/screenshots.mjs (Playwright)
+```
+
+- **Boundaries:**
+  - `site/` is the storefront and isn't in the npm package.
+  - `site/build.js` only reads `src/pro.js` constants, so it doesn't change the CLI.
+  - The pages are static, and the only script is `license.js`. It reads the query string and writes `textContent`.
+- **Security:**
+  - The checkout URL comes from env, and only `https://buy.stripe.com/<id>` is accepted. That allowlist means a typo or a hostile value can't put another link behind the Buy button. Attribute escaping still applies.
+  - The session id is matched against `cs_(test|live)_[A-Za-z0-9]+` and written with `textContent`, so it can't inject markup.
+  - `Referrer-Policy: no-referrer`, as both a header and a meta tag, keeps the session id in the thanks URL from leaking through links.
+  - The preview server binds to 127.0.0.1 and refuses paths outside its root.
+- **Data flow:** no data is stored anywhere we run. Stripe holds the payment. The license string lives in the buyer's URL and shell profile.
+- **Failure scenarios:**
+
+| Codepath | Realistic failure | Handled by |
+|---|---|---|
+| `PRO_CHECKOUT_URL` unset (preview deploys, or before David's go-ahead) | A Buy button to nowhere | No link. The page says "Checkout opens soon" (test). |
+| `PRO_CHECKOUT_URL` mistyped (`http:`, a dashboard URL, a stray quote) | A broken or hostile Buy link goes live | The build fails, so Vercel keeps the last good deploy. The message names the variable, never its value (test). |
+| Buyer closes the tab before the redirect (Stripe's own warning) | Paid, no license string | The terms and thanks page say to reply to the Stripe receipt. Any non-blank value works meanwhile (honour system). |
+| Thanks page opened without, or with a forged, `session_id` | Script injection, or a junk license | The regex rejects it, the fallback text shows, and nothing is injected (test with `<img onerror>` and quote payloads). |
+| A page edit adds an inline script or a CDN font | The CSP blocks it on Vercel, or the privacy promise breaks | A test fails on inline scripts and styles, `on*=` handlers and any other-origin `src` or `href` except the allowed links. |
+| A template edit leaves `{{SOMETHING}}` | Raw braces on the live page | The build throws on unknown placeholders, and a test checks that none survive. |
+| Preview server path traversal (`/..%2fpackage.json`) | Leaks repo files on localhost | Paths are resolved and checked to stay under the root, and NUL bytes are rejected (test). |
+| The host runs `npm install` | A browser download or install script runs | `playwright-core` downloads no browser and has no install script. |
+| Checkout switched on for the Vercel Hobby deploy | Breaks Vercel's non-commercial clause, and the project can be suspended | `PRO_CHECKOUT_URL` goes only to Cloudflare Pages (the `.provision` request says so). `_headers` gives that host the same CSP (test). |
+| A header added to `vercel.json` in a shape `serve.js` or `_headers` can't translate | It's missing locally or on Cloudflare Pages | The build throws on an untranslatable source, and a test pins `vercel.json` to the two supported shapes. |
+
+### Test plan
+
+New file `test/storefront.test.js`. Each test fails before the change: `site/build.js`, `site/serve.js`, `site/pages/license.js` and `vercel.json` don't exist yet.
+
+| Exit criterion (ROADMAP M3, revenue) | Tests |
+|---|---|
+| S1. `npm run site:build` writes the static site; every internal link and asset resolves; no placeholder is left | `buildSite` into a temp dir: the files exist, every relative `href` and `src` resolves to a built file, no `{{`, and each page has `lang`, `charset`, viewport and `title`. The CLI (`node site/build.js DIR`) exits 0 and says whether checkout is on. `package.json` has `site:build`. An unknown placeholder throws. |
+| S2. Landing: what it is, the free install line, the price from `PRO_PRICE`, terms and privacy next to the buy button | Text checks on `index.html`. The `#buy` section holds `terms.html` and `privacy.html` links, and the sample receipt shows `[REDACTED]`. |
+| S3. Checkout switch | `checkoutUrl` unit cases. With a runtime-built `buy.stripe.com` link, `#buy` is an `<a>` to it, and it's the only Stripe URL in the site. Unset or blank: no `stripe.com` link anywhere and "Checkout opens soon". Invalid values (`http:`, another host, a quote payload, `javascript:`) make `buildSite` and the CLI fail, and neither error contains the value. |
+| S4. Terms and privacy commitments; every page links both | Regex checks for each commitment, plus a footer check on all four pages. |
+| S5. The thanks page shows the license string, and it hides the footer | `licenseFrom` and `showLicense` on a fake document: a valid id sets `textContent` and shows the block; missing, forged or injection ids leave the fallback. `thanks.html` has the elements and the module script. End to end: the id given to `runCli` as `OVERNIGHT_RECEIPTS_LICENSE` means the `--out` file has no footer. |
+| S6. The site keeps its privacy promise | No other-origin `src`/`href` except the allowlist (GitHub repo, Stripe link, Stripe and Vercel privacy pages). No inline `<script>`, `<style>`, `style=` or `on*=`. A `no-referrer` meta on every page, `noindex` on thanks. `vercel.json`: build command, `dist`, a CSP with `default-src 'self'`, `Referrer-Policy`, `nosniff`, and `X-Robots-Tag` on `/thanks.html`. `dist/_headers` matches `vercel.json` rule for rule (plus `/thanks`). `site/` isn't in `files`. |
+| Preview server (screenshots depend on it) | It serves `/` → `index.html` with the right content types and sends `vercel.json`'s headers (`noindex` only on thanks). It gives 404 for a missing file, `/..%2fpackage.json` and a NUL byte, and 405 for POST. |
+
+M1–M3 and the M2 revenue tests (236) must stay green. Screenshots run outside `npm test` (`npm run screenshots`).
+
+## What it does now
+
+The product has two parts. The CLI didn't change in this pass; the storefront is new.
+
+**The CLI, `overnight-receipts`** (free, MIT) is local and read-only. It reads the Claude Code session logs in `~/.claude/projects` (plus Entire checkpoints, when a repo has them) and the repo's git branches. It prints one receipt per branch changed in the window, ranked worst first, each with a `merge` / `fix` / `kill` suggestion. A receipt shows:
+- the task
+- the session and how it was matched
+- the last test run
+- commits and diff stat
+- retries
+- risky paths and files outside the task area
+- a "needs you" list
+
+Every transcript-derived line cites its transcript line.
+
+| Command | Does |
+|---|---|
+| `overnight-receipts [--since 12h] [--repo PATH] [--base BRANCH]` | Terminal receipts, with no footer. |
+| `… --out FILE.md` | Also writes Markdown. The file ends with the one-line Pro footer unless `OVERNIGHT_RECEIPTS_LICENSE` is set. |
+| `… --json` | Machine-readable receipts (`schema/receipts.schema.json`). |
+| `… --summarize` | A two-sentence summary per receipt from your own `claude -p`. The only option that runs anything but git. |
+| `overnight-receipts digest --out FILE [--repo PATH]…` | One short file across repos for cron and push delivery. |
+
+**The storefront** (new, `site/` → `dist/`) is four static pages:
+
+| Page | Shows |
+|---|---|
+| `index.html` | What it is, the free install line, a sample receipt, and the Pro box. The box holds the price from `PRO_PRICE` and the **Buy Pro · $12 once** button. That button links the Stripe Payment Link when `PRO_CHECKOUT_URL` is set; otherwise the box says "Checkout opens soon". Terms, privacy and the 30-day refund sit under the button. |
+| `terms.html` | What you buy, the honour system, payment by Stripe, 30-day refunds, a lost license, no warranty ("as is"), best-effort redaction, liability capped at the price. |
+| `privacy.html` | The tool: on your machine, read-only, nothing uploaded, no telemetry, and what `--summarize` sends. The site: no cookies, no analytics, Vercel or Cloudflare request logs. Stripe: what the maintainer sees, and that it's never sold. |
+| `thanks.html` | Where Stripe redirects after payment, with `?session_id={CHECKOUT_SESSION_ID}`. `license.js` checks the id and shows `export OVERNIGHT_RECEIPTS_LICENSE="cs_…"`. Without a valid id it shows how to get one (reply to the Stripe receipt). It's `noindex`, sends no referrer, and isn't cached. |
+
+**The money path:**
+1. The CLI's `--out` footer links to README `#pro`.
+2. README `#pro` links to the storefront (the link is added at launch).
+3. **Buy** opens the Stripe Payment Link.
+4. Stripe redirects to the thanks page, which shows the license line.
+5. With `OVERNIGHT_RECEIPTS_LICENSE` set, the footer is gone.
+
+A test runs steps 4 and 5 end to end, and the screenshots show steps 1, 3 and 4.
+
+**Can it take money yet?** The code is ready. Once the storefront is deployed with `PRO_CHECKOUT_URL`, buyers can pay and get their license string. Three things are missing, and none of them is code:
+- David's Stripe Payment Link (requested in `.provision`)
+- the Cloudflare Pages deploy (requested)
+- REVENUE.md's gate: at least 90% attribution on 10+ real runs before switching checkout on
+
+The full list is in [What's left](#whats-left).
+
+## Run it locally
+
+Requires Node ≥ 22 and git. The CLI and the site build have no dependencies. `playwright-core` (a devDependency) is only for screenshots.
+
+```sh
+npm test                                   # 265 tests (node:test), ~3 s
+npm run demo                               # the CLI on a fixture repo in a temp dir: terminal, Markdown (with footer), digest
+node bin/overnight-receipts.js --since 12h # in any repo you've run Claude Code in
+npm run site:build                         # dist/ with checkout off ("Checkout opens soon")
+PRO_CHECKOUT_URL=https://buy.stripe.com/<your link id> npm run site:build   # checkout on
+npm run site:preview                       # build, then serve dist/ at http://127.0.0.1:4173/ with vercel.json's headers
+npm install && CHROMIUM_PATH=/path/to/chromium npm run screenshots          # regenerate docs/screenshots/ (never downloads a browser)
+```
+
+Open `http://127.0.0.1:4173/thanks.html?session_id=cs_test_` followed by 16 or more letters and digits to see the license line. Any other value shows the fallback.
+
+## Deploy (free tier)
+
+**The CLI** has nothing to host, as before:
+- `npx github:smithdavedesign/overnight-receipts --since 12h` once the repo is public
+- or `npm publish` (free for public packages)
+
+**The storefront** is a static `dist/` and needs no server, database or secrets.
+
+1. **Pre-launch, on Vercel Hobby (free):** `.provision` creates the `dawnlog` project. Connect it to the repo. `vercel.json` sets the build command (`npm run site:build`), the output directory (`dist`), `framework: null` and the security headers. Every push deploys. Leave `PRO_CHECKOUT_URL` unset there, so the page says "Checkout opens soon".
+2. **Live, with checkout, on Cloudflare Pages (free plan, commercial use allowed).** This is requested in `.provision`.
+   - Connect the same repo: build command `npm run site:build`, output directory `dist`, env `NODE_VERSION=22` and `PRO_CHECKOUT_URL`.
+   - The build writes `dist/_headers`, so Pages serves the same CSP, no-referrer, nosniff and `noindex` as Vercel.
+   - The Stripe redirect goes to `https://<project>.pages.dev/thanks?session_id={CHECKOUT_SESSION_ID}`. Pages serves `thanks.html` at `/thanks`, so no redirect can drop the query string.
+   - **Why not Vercel for this step:** Vercel's Hobby plan is non-commercial only, and Vercel Pro ($20/month) would break the $0 rule.
+3. **Switching checkout on or off** is one env var. Set `PRO_CHECKOUT_URL` and redeploy to open checkout; unset it to close. A malformed value fails the build, so the last good deploy stays up.
+
+## Infrastructure
+
+Requested in `.provision`, one per line. Nothing in the tests needs any of it.
+
+| Line | For | Value the code reads |
+|---|---|---|
+| `vercel project dawnlog` | The pre-launch storefront and preview deploys (checkout off) | none. `PRO_CHECKOUT_URL` must **not** be set on this project. |
+| `request "Stripe Payment Link for dawnlog: …"` | The $12 one-time checkout, with the after-payment redirect to `/thanks?session_id={CHECKOUT_SESSION_ID}` | `PRO_CHECKOUT_URL` (a `https://buy.stripe.com/…` link, not a secret, but kept in env so switching checkout on is a config step) |
+| `request "Cloudflare Pages project for dawnlog: …"` | The live storefront once checkout is on | `PRO_CHECKOUT_URL`, `NODE_VERSION=22` |
+
+There's no database, no API key and no other secret. Stripe has no monthly fee, only a fee per sale (about $0.65 on $12, per REVENUE.md). There's no webhook, so no signing secret is needed.
+
+## Exit criteria
+
+All pass: `npm test` gives 265 tests and 0 failures.
+
+| Milestone | Criterion | Status | Test |
+|---|---|---|---|
+| M1 | The 7 criteria (receipts per branch, FAILED ranking, retries, risk, redaction, unmatched, no `~/.claude`) | ✅ | `cli.test.js` exits 1–7 |
+| M2.1–M2.3 | Golden ranking; `source: file:line` on every field; `--json` schema | ✅ | `m2.test.js` › exits 1–3 |
+| M2 R1–R4 | The Pro footer in the `--out` Markdown only; the license hides it; the README `## Pro` target | ✅ | `m2.test.js` › M2 revenue |
+| M3.1–M3.3 | Only git without `--summarize`; digest written; Entire ingestion | ✅ | `m3.test.js` |
+| **M3 S1** | `npm run site:build` writes every page, links resolve, no placeholder left | ✅ | `storefront.test.js` › exit S1 (5 tests, including the output-dir guard and `render`) |
+| **M3 S2** | Landing: what it is, install line, price from `PRO_PRICE`, terms and privacy by the buy button | ✅ | › exit S2 (2 tests) |
+| **M3 S3** | `PRO_CHECKOUT_URL` on → Buy links the Payment Link; unset or blank → "opens soon", no Stripe link; invalid → the build fails without printing the value | ✅ | › exit S3 (5 tests: 8 invalid values, library and CLI) |
+| **M3 S4** | Terms and privacy commitments; every page links both | ✅ | › exit S4 (3 tests) |
+| **M3 S5** | The thanks page turns a Checkout Session id into the license line; forged ids give none; that string hides the CLI footer | ✅ | › exit S5 (6 tests, including the end-to-end CLI run) |
+| **M3 S6** | Nothing from other origins, no inline code, no-referrer, a strict CSP in `vercel.json` and `_headers`, thanks is noindex, the site isn't in the npm package | ✅ | › exit S6 (5 tests) |
+| (support) | Preview server: content types, `vercel.json` headers, path traversal, NUL bytes, 405 | ✅ | › site/serve.js (3 tests) |
+| PRD | Receipts under 5 s for 100 session files | ✅ | `perf.test.js` |
+
+Screenshot proof, from `npm run screenshots` (each PNG was opened and checked):
+- `home-*`: the landing page with the Buy button
+- `receipts-*`: the real CLI run and the Markdown footer
+- `license-*`: the thanks page with the license line
+
+## What's left
+
+**Launch checklist (David; none of it is code):**
+1. **Make the repo public, or `npm publish`.** The PRD says the repo is still private. Until it's public, the landing page's install line and GitHub links, and the CLI footer's link to README `#pro`, lead to a 404.
+2. **Measure attribution:** at least 90% on 10+ real overnight runs (REVENUE.md). If it misses, don't switch checkout on.
+3. **Create the Stripe Payment Link** (requested):
+   - It must charge exactly `PRO_PRICE` ($12). The pages read the price from `src/pro.js`, but Stripe's price is set in Stripe.
+   - Redirect to `/thanks?session_id={CHECKOUT_SESSION_ID}`.
+   - Try it once in test mode.
+4. **Cloudflare Pages project** (requested), with `PRO_CHECKOUT_URL` set there only.
+5. **Put the live URL in README `## Pro`** in place of "Checkout opens once the storefront is live".
+6. **Review the terms:** add the seller's legal name, a contact address, and governing law if wanted, and decide on Stripe Tax. These were left out rather than invented.
+7. **Bump the version** (still 0.3.0) when publishing.
+
+**Deliberately not built (see Scope):** a server, webhooks, license checks, analytics and click counting, and a custom domain. REVENUE's counting (stars, issues, installs, payments) is manual from GitHub, npm and the Stripe dashboard.
+
+**Needs real use (PRD metrics):** two weeks of measured triage time, and `--summarize` tried on a real night.
+
+**Not built (unchanged):**
+- Entire's ref-based checkpoints, subagent transcripts, uncommitted worktree changes, and Codex (a v1 non-goal).
+- Wrapped test commands (`bash -c "npm test"`) show as UNVERIFIED.
+- Windows is untested.
+- There's no CI workflow.
+
+## Review
+
+This is a self-review of this pass's diff (`git status`, `git diff`) against gstack's pre-landing checklist ("Review Categories", "Fix-First Heuristic").
+
+**Diff:**
+- New:
+  - `site/build.js`, `site/serve.js`
+  - `site/pages/` (4 pages, `style.css`, `license.js`, `favicon.svg`)
+  - `vercel.json`, `.provision`, `.gitignore`
+  - `scripts/screenshots.mjs`, `docs/screenshots/` (6 PNGs)
+  - `test/storefront.test.js` (29 tests)
+  - `package-lock.json` (playwright-core)
+- Changed:
+  - `package.json` (scripts, devDependency)
+  - README, ROADMAP, BUILD
+- No CLI source changed.
+
+**No CRITICAL findings remain.**
+
+**Fixed (tests rerun: 265/265 pass):**
+- [P1] (confidence: 9/10) `site/build.js`: **destructive delete.** The build deletes its output directory first, so `node site/build.js ~` would have wiped a home directory.
+  - Fix: it refuses unless the directory is missing, empty or a previous build (`index.html` + `license.js`), and never touches the source pages. Tested, including that nothing is deleted on refusal.
+- [P1] (confidence: 8/10) **Hosting terms.** Taking money from a Vercel Hobby deploy breaks Vercel's non-commercial clause, and the project could be suspended mid-sale.
+  - Fix: the build emits `dist/_headers` from `vercel.json`, so Cloudflare Pages' free plan (commercial use allowed) gets the same headers.
+  - `.provision` puts `PRO_CHECKOUT_URL` there only.
+  - Tested: `_headers` matches `vercel.json` rule for rule.
+- [P2] (confidence: 7/10) **Stripe redirect.** Cloudflare Pages serves `thanks.html` at `/thanks`. A redirect URL ending in `.html` would depend on Pages keeping the query string through its own redirect.
+  - Fix: the request names `/thanks?session_id=…`, and `_headers` covers both paths.
+- [P3] (confidence: 8/10) `site/build.js`: the invalid-URL error's hint (`https://buy.stripe.com/…`) contained one of the test's invalid values verbatim.
+  - Fix: reworded. The test was unchanged and now passes.
+- [P3] (confidence: 8/10) `scripts/screenshots.mjs`: if the preview server failed to start, its process was left running.
+  - Fix: it's killed on failure.
+- [P3] (confidence: 7/10) `site/serve.js` and `_headers` translate only two header `source` shapes. A new pattern in `vercel.json` would silently not apply locally or on Pages.
+  - Fix: the build throws on others, and a test pins `vercel.json` to the two shapes.
+- [P3] **Seen in the screenshots:**
+  - `system-ui` resolved to a monospace face under Linux fontconfig, so it's dropped from the font stack.
+  - The install line overflowed on a phone, so it now wraps.
+  - The desktop Buy button was below the fold, so the landing page now has a two-column hero.
+
+**Checked, nothing to fix:**
+- **SQL, races, N+1:** none. There's no database. The build writes a fresh directory, and nothing else writes to it.
+- **Unsafe HTML:**
+  - `render` escapes every text value.
+  - The one HTML value (the Buy control) is built from an allowlisted URL, and that URL is escaped again.
+  - `license.js` writes only `textContent` (a test fails on `innerHTML`, `document.write` and similar). Injection ids are rejected by the regex (tested).
+  - The screenshot page escapes the CLI output.
+- **Secrets:**
+  - Nothing credential-shaped is in any file. The stand-in Payment Link and session id are built at runtime.
+  - The build never prints `PRO_CHECKOUT_URL`, even when it's invalid (tested).
+  - The session id in the thanks URL is covered by `no-referrer` (header and meta), `noindex` and `no-store`, and it's never sent anywhere.
+- **Shell injection:** every spawn uses argument arrays, and the `.provision` lines contain no `$` or backticks.
+- **LLM trust boundary:** not touched.
+- **Enum and value completeness:**
+  - `PRO_CHECKOUT_URL` is read only in `site/build.js`.
+  - `LICENSE_ENV` and `PRO_PRICE` reach the pages only through `{{…}}`. The tests compare them with `src/pro.js`.
+  - Header rules flow from `vercel.json` to `serve.js` and `_headers`, which is pinned by a test.
+- **Offline CLI:** unchanged. The M3 network trap is still green.
+- **Distribution:** the site isn't in the npm package (tested). The hosts build it from the repo.
+
+**Left (none CRITICAL):**
+- [P2] (confidence: 8/10) **User-visible:** the CLI footer → README `#pro` → storefront chain has a gap until launch. The README section says checkout isn't live yet, and the storefront URL can't be known before Cloudflare assigns it. Launch checklist items 1 and 5.
+- [P2] (confidence: 7/10) **Price drift:** Stripe's price is set in Stripe, not from `PRO_PRICE`, so the two can disagree. Launch checklist item 3.
+- [P2] (confidence: 6/10) **The legal text was written by an engineer, not a lawyer.** It has no legal name, address, governing law or tax handling. Medium confidence that this matters at $12 and 10 sales; David should read it before switching checkout on (item 6).
+- [P3] **Honour system.** Anyone can open `thanks.html` with an invented id and get a "license". This is by design, and the CLI accepts any non-blank value anyway.
+- [P3] **A buyer who never reaches the thanks page** (Stripe's own warning) gets the string by replying to the receipt. That's manual, as REVENUE says, for the first 10 sales.
+- [P3] (confidence: 5/10) **The pre-launch Vercel page names a price** while checkout is off. Nothing can be bought there, so it should be on the safe side of Vercel's clause. For zero ambiguity, host both phases on Cloudflare Pages.
+- [P3] **The landing page's sample receipt is hand-trimmed** from a real run, to fit a column. The `receipts-*` screenshots show an untrimmed real run.
+
+## M2 pass (2026-10-13), as written
+
+These are the M2 pass's notes as written that day. Its plan, its snapshot of the product, and its review are kept here, and the sections above are current.
+
+**M2 pass of the MVP run (2026-10-13).** This was planned non-interactively with gstack's Step 0, Architecture review and Test review. Nobody was available to answer questions, so each decision is written down here with its reason.
+
+### Step 0: Scope Challenge
+
+1. **What already solves each sub-problem?**
+   - ROADMAP's three M2 exit criteria are already built, and their tests pass (`test/m2.test.js`, 229/229 green at the start of this pass):
+     - ranking against `test/golden/ranking.txt`
+     - `sources` with `file:line` on every field
+     - `--json` against `schema/receipts.schema.json`
+
+     Nothing there needs rebuilding.
+   - What's new is REVENUE.md. It says M2 "is the real MVP for charging", and that "the Pro link goes in the README and in the `--markdown` output footer". It also asks for a landing page with privacy and terms, a $12 Stripe Payment Link, and manual fulfilment.
+   - Existing code already does most of the work:
+     - The Markdown writer exists (`renderMarkdown`, through `--out`).
+     - `main(argv, env)` already takes the environment as a parameter.
+     - Every written byte already goes through `clean()`.
+   - The footer is one more line from that path, not a new output.
+2. **Which REVENUE.md parts fit M2, and which fit M3:**
+   - **M2 (this pass): the Pro surface inside the product.** M2 is the Markdown, `--json` and ranking milestone, and REVENUE names it as the one that makes the product worth paying for.
+     - the footer link in the Markdown file
+     - an honour-system supporter license that hides the footer
+     - npm's `funding` field
+     - a README "Pro" section that the footer links to
+   - **M3 (next pass): the storefront.** M3 is the delivery milestone, and these parts need a deploy and a Stripe account (a `request` for David):
+     - a landing page
+     - the checkout (a Stripe Payment Link)
+     - terms and privacy
+     - the confirmation message that shows the license string
+   - Charging can't start before M3, because there's no checkout before it. So M2 never links to a checkout without terms next to it.
+3. **Minimum change set:**
+   - **The footer.** One line at the end of the `--out` Markdown file, with the price and a link to the Pro section. `OVERNIGHT_RECEIPTS_LICENSE` (any non-blank value) turns it off.
+   - **No footer elsewhere.** Terminal output, `--json` and the digest stay unchanged.
+   - **`funding` field** in `package.json`. This is the single source for the URL.
+   - **README `## Pro` section**, which is the footer's link target.
+4. **Complexity check:**
+   - Files:
+     - `src/pro.js` (new, about 20 lines)
+     - `src/render.js` and `src/cli.js` (a few lines each)
+     - `package.json`
+     - `test/helpers.js` (hermetic env)
+     - `test/m2.test.js`
+     - docs: README, ROADMAP, BUILD
+   - 0 classes, 0 services, 0 dependencies. That's under the 8-file / 2-service smell threshold for code, so no reduction is needed.
+5. **Search check:**
+   - **[Layer 1]** npm's built-in `funding` field: `npm fund` lists it, and `npm install` mentions it, at no cost. The footer reads its URL from the same field, so there's one source. (Search confirmed the field shapes: a string, `{type, url}` or an array.)
+   - **[Layer 1]** Stripe Payment Links can show a **custom confirmation message** after payment. They can also redirect to a page with `{CHECKOUT_SESSION_ID}`. So M3 needs no success-page server to show the license string. (Stripe docs, post-payment.) This is noted now because it shapes the license design. The string is shown, never checked against a server.
+   - **Footgun avoided:** JSON import attributes (`import … with { type: 'json' }`) have printed an ExperimentalWarning on some Node 22 releases. That would add a line to stderr, and a test asserts `--json` stderr is empty. `package.json` is read with `fs.readFileSync` instead.
+6. **TODOS.md:** none exists. Follow-ups go to "What's left".
+7. **Completeness check:**
+   - The tests cover the footer's presence and its absence (license set; blank license still counted as unset), plus every other output (terminal, stderr, `--json`, digest text and md).
+   - They also check that the link target exists: the README anchor, and the same price in the README as in the code.
+8. **Distribution check:** no new artifact. Through `npx github:smithdavedesign/overnight-receipts` the `funding` field does nothing until a package is installed, and `npm publish` is still optional (see Deploy).
+
+### Scope
+
+**In (M2 pass):**
+- **Footer:** at the end of the Markdown file written by `--out`, after a `---` rule. It's one line with the price, a `[Pro, $12 once](<funding.url>)` link and how to hide it. The exact text is in [What it does now](#what-it-does-now).
+- **`OVERNIGHT_RECEIPTS_LICENSE`:** any non-blank value hides the footer. The value is never printed, logged or checked.
+- **`package.json`:** `funding: { type: "individual", url: "https://github.com/smithdavedesign/overnight-receipts#pro" }`.
+- **README `## Pro` section:**
+  - the price and what paying gets you
+  - that it's an honour system
+  - that checkout opens with the M3 storefront
+- **ROADMAP M2:** the four revenue exit criteria below.
+
+**Deliberately not in this pass:**
+- The landing page, the Stripe Payment Link, terms and privacy pages, and the license string shown after payment. All of these are M3.
+- **Gating the Pro features (no private `dawnlog-pro` repo).** REVENUE.md imagines Pro features in a private repo. But Markdown, `--json`, triage and `digest` already ship publicly under MIT, and the repo is public. Moving them would:
+  - remove functionality people already have
+  - break the M2 and M3 exit-criteria tests
+  - be undone by any fork
+
+  REVENUE.md's own risk list says "paying is a courtesy, not a gate". So Pro is a supporter license.
+- **License verification.** It would need a signing key (a credential to keep somewhere) or a server. REVENUE says to automate nothing before the tenth sale. With manual fulfilment, the honour system is the whole mechanism.
+- **A footer in the digest.** It's pushed to a phone every morning, and a sales line there daily is spam. It's also not in the terminal (the free tier stays clean) or in `--json` (machine-readable, schema unchanged).
+- Counting Pro-link clicks (REVENUE step 6). There's no server in M2. M3's storefront is where clicks can be counted.
+
+### Architecture
+
+```
+bin/overnight-receipts.js ─▶ src/cli.js main(argv, env)
+                                │ --out FILE
+                                │   footer = proFooter(env)          ◀── src/pro.js
+                                │     null if OVERNIGHT_RECEIPTS_        PRO_URL  = package.json funding.url
+                                │     LICENSE is set (non-blank)         PRO_PRICE = '$12'
+                                ▼
+                   src/render.js renderMarkdown(report, { window, footer })
+                                │   …receipts… then "---" + footer (static text, not transcript data)
+                                ▼
+                   clean() ─▶ FILE           (stdout, --json, digest: unchanged, no footer)
+```
+
+- **Boundaries.** `render.js` stays pure: it gets the footer string and never reads the environment. `cli.js` already owns `env`. `pro.js` owns the URL, price and wording, so M3 has one place to extend.
+- **Security.**
+  - The footer is static text, not transcript data, so it adds no new trust boundary. It still goes through `clean()` like every byte, and a GitHub URL matches no redaction pattern (asserted: the link is intact in the file).
+  - The license value is only tested for presence. It's never echoed, logged or written.
+- **Failure scenarios:**
+
+| Codepath | Realistic failure | Handled by |
+|---|---|---|
+| `pro.js` reading `package.json` | A fork deletes `funding`, sets an `http:`/`javascript:` link or an array, or `package.json` is unreadable | `fundingUrl` returns null (or the first https entry), so there's no footer, no "undefined" link and no crash (unit test). |
+| License env | A user sets it to `""` or spaces in a shell profile | Blank counts as unset, so the footer shows (test). |
+| Footer link | The README heading is renamed and the anchor breaks | A test checks that the README has `## Pro` and the same price as `PRO_PRICE`. |
+| Tests | A developer has `OVERNIGHT_RECEIPTS_LICENSE` set in their shell | `runCli` deletes it, so tests stay hermetic. |
+| Markdown safety | The footer adds a link, and the transcript-neutralising test checks for links | Only the footer link exists. The `[docs](` and `![x](` checks from transcripts still pass. |
+
+### Test plan
+
+New tests go in `test/m2.test.js` › "M2 revenue". Each one fails before the change.
+
+| Exit criterion (ROADMAP M2, revenue) | Test |
+|---|---|
+| R1. The `--out` Markdown file ends with a Pro footer: a `---` rule, the price, and a link to `package.json` `funding.url` | Run the CLI with `--out`. The file's last lines are the rule plus a footer with `[Pro, $12 once](<funding.url>)`. |
+| R2. `OVERNIGHT_RECEIPTS_LICENSE` hides it; a blank value doesn't | Run the same fixture with and without a runtime-built license value. The licensed file equals the unlicensed one minus the footer, byte for byte. A blank value (`'  '`) still shows the footer, and the value never appears in any output. |
+| R3. The footer is only in the Markdown file | Terminal stdout, stderr, `--json` stdout and the digest (`text` and `md`) don't contain the Pro URL. The `--json` output still validates. |
+| R4. The link target exists | `package.json` `funding` is `{ type, url }` with an https URL ending `#pro`. The README has a `## Pro` heading and states `PRO_PRICE` once, plus the license variable. |
+| Unit | `proFooter` returns null without a URL, null with a license, and a string otherwise. |
+| Unit (added in review) | `fundingUrl` reads every npm `funding` shape (string, `{type, url}`, array). It returns null for a missing file, bad JSON, no field, `http:`, `javascript:`, or a URL with a space, bracket or parenthesis. |
+
+M1–M3's 229 existing tests must stay green. The Markdown-safety, redaction and network-trap tests already run `--out`, so they cover the footer too.
+
+### What it did after the M2 pass
+
+`overnight-receipts` is a local, read-only CLI. It reads the Claude Code session logs in `~/.claude/projects` (plus Entire checkpoints, when a repo has them) and the repo's git branches. It prints one receipt per branch changed in the window, ranked worst first, each with a `merge` / `fix` / `kill` suggestion. A receipt shows:
+- the task
+- the session and how it was matched
+- the last test run
+- commits and diff stat
+- retries
+- risky paths
+- files outside the task area
+- a "needs you" list
+
+Transcript-derived lines cite their transcript line.
+
+| Command | Does |
+|---|---|
+| `overnight-receipts [--since 12h] [--repo PATH] [--base BRANCH]` | Terminal receipts. Free, with no footer. |
+| `… --out FILE.md` | Also writes the receipts as Markdown. **New in this pass:** the file ends with the Pro footer (below). |
+| `… --json` | Machine-readable receipts, schema `schema/receipts.schema.json`. No footer. |
+| `… --summarize` | A two-sentence summary per receipt from your own `claude -p`. The only option that runs anything but git. |
+| `overnight-receipts digest --out FILE [--repo PATH]…` | One short file across repos, for cron and push delivery (`scripts/morning-digest.sh` sends it to WhatsApp). No footer. |
+
+The footer at the end of every `--out` Markdown file:
+
+```
+---
+
+Made with overnight-receipts, free and MIT. If it saved you a morning: [Pro, $12 once](https://github.com/smithdavedesign/overnight-receipts#pro). Already a supporter? Set `OVERNIGHT_RECEIPTS_LICENSE` to hide this line.
+```
+
+- **The link** goes to the README's `## Pro` section. That section gives the price, what paying changes and that it's an honour system. It also says plainly that checkout isn't open yet.
+- **One source for the URL:** `package.json` `funding`, npm's standard field. The footer reads the URL from there.
+- **Turning it off:** any non-blank `OVERNIGHT_RECEIPTS_LICENSE` removes the footer and changes nothing else in the file. The value is never printed.
+
+**Can it take money yet? No.** There is no checkout, terms or privacy page until M3. REVENUE.md also says not to charge until attribution is at least 90% on David's own runs (see What's left).
+
+### Run it locally (M2 pass)
+
+Requires Node ≥ 22 and git. No dependencies, nothing to install or build.
+
+```sh
+npm test                                          # 236 tests (node:test), ~4 s
+npm run demo                                      # fixture repo in a temp dir: terminal, Markdown (with the footer) and a digest
+node bin/overnight-receipts.js --since 12h        # in any repo you've run Claude Code in
+node bin/overnight-receipts.js --since 12h --out /tmp/receipts.md                                 # ends with the Pro footer
+OVERNIGHT_RECEIPTS_LICENSE=supporter node bin/overnight-receipts.js --since 12h --out /tmp/receipts.md   # no footer
+```
+
+### Deploy (M2 pass)
+
+There's nothing to host. The CLI runs on the user's machine, and both ways to ship it cost $0:
+- **GitHub, no publish step:** `npx github:smithdavedesign/overnight-receipts --since 12h`. The repo is public, and there's no build and no dependencies.
+- **npm:** check the name is still free (`npm view overnight-receipts`), then run `npm publish`. Public packages are free. Once published, `funding` shows the Pro link through `npm fund` in projects that depend on it.
+
+The Pro link points at the GitHub README, so it works without any hosting. M3's storefront will be a static site on Vercel's free tier.
+
+### Infrastructure (M2 pass)
+
+**This M2 pass asks for nothing.** There's no database, no API key and no `.provision` file. The CLI is offline and needs no secrets, and the tests use none.
+
+Planned for M3, not requested yet (this pass doesn't use them):
+- `vercel project dawnlog`, for the storefront page.
+- `request "Stripe Payment Link for dawnlog: $12 one-time 'overnight-receipts Pro', with a custom confirmation message that shows the supporter license string"`. Stripe has no monthly fee, only a fee per sale.
+
+### Exit criteria (M2 pass)
+
+All pass: `npm test` gives 236 tests and 0 failures.
+
+| Milestone | Criterion | Status | Test |
+|---|---|---|---|
+| M1 | The 7 criteria (receipts per branch, FAILED ranking, retries, risk, redaction, unmatched, no `~/.claude`) | ✅ | `cli.test.js` exits 1–7 (see [M1 exit criteria](#m1-exit-criteria-2026-10-11)) |
+| M2.1 | Ranking order matches a golden file | ✅ | `m2.test.js` › exit 1 |
+| M2.2 | Each receipt field carries a `source: file:line` | ✅ | `m2.test.js` › exit 2 |
+| M2.3 | `--json` validates against a schema | ✅ | `m2.test.js` › exit 3 |
+| **M2 R1** | The `--out` Markdown file ends with a Pro footer: rule, price, link to `funding.url` | ✅ | `m2.test.js` › M2 revenue › exit R1 |
+| **M2 R2** | `OVERNIGHT_RECEIPTS_LICENSE` hides it and changes nothing else; blank counts as unset; the value is never printed | ✅ | › exit R2 (two tests: byte-for-byte diff, blank values) |
+| **M2 R3** | The footer is only in the Markdown file: not in the terminal, stderr, `--json` or the digest | ✅ | › exit R3 |
+| **M2 R4** | The link target exists: `funding` shape, `#pro` anchor, README `## Pro` with the same price | ✅ | › exit R4, plus `proFooter` and `fundingUrl` unit tests |
+| M3.1–M3.3 | No subprocess or network calls but git without `--summarize`; digest written; Entire ingestion | ✅ | `m3.test.js` (the network trap also covers the `--out` run that writes the footer) |
+| PRD | Receipts under 5 s for 100 session files | ✅ | `perf.test.js` |
+
+### What was left after the M2 pass
+
+**M3, next in this run: the storefront.**
+- A static landing page: what it is, the free install line, and the $12 Pro button.
+- Terms and privacy pages. They need to say: local only, read-only, nothing uploaded, redaction is best-effort, refunds.
+- The Stripe Payment Link (a `request` for David), with the license string in its custom confirmation message.
+- Then the README's "Checkout isn't open yet" line becomes the checkout link.
+
+**Before charging (REVENUE.md, needs David and real use):**
+- At least 90% attribution on 10+ real overnight runs. This hasn't been measured, and REVENUE says don't charge until it is.
+- Fulfilment is manual for the first 10 sales, so there's nothing to automate before then.
+- Counting Pro clicks needs the M3 page. The CLI won't phone home.
+
+**Needs real use (PRD metrics):** two weeks of measured triage time, and `--summarize` tried on a real night.
+
+**Not built (unchanged from the first M3):**
+- Entire's ref-based checkpoints, subagent transcripts, uncommitted worktree changes, and Codex (a v1 non-goal).
+- Wrapped test commands (`bash -c "npm test"`) show as UNVERIFIED.
+- Windows is untested.
+- There's no CI workflow.
+
+### Review (M2 pass)
+
+This is a self-review of the M2 pass's diff (`git status`, `git diff`) against gstack's pre-landing checklist ("Review Categories", "Fix-First Heuristic").
+
+**Diff:**
+- `src/pro.js` (new)
+- `src/cli.js` (+1 import, 1 line)
+- `src/render.js` (footer option)
+- `package.json` (`funding`)
+- `test/helpers.js` (hermetic env)
+- `test/m2.test.js` (+8 tests)
+- README, ROADMAP, BUILD
+
+**No CRITICAL findings.**
+
+**Fixed (tests rerun: 236/236 pass):**
+- [P3] (confidence: 8/10) `src/pro.js`: reading `package.json` at module load could throw, and then the whole CLI fails, terminal mode included, because of a footer.
+  - Fix: `fundingUrl()` catches the error and returns null, so there's no footer. Unit-tested with a missing file and bad JSON.
+- [P3] (confidence: 8/10) `src/pro.js`: npm also allows `funding` as an array, which was read as no URL.
+  - Fix: the first entry wins. Unit-tested for the string, object and array shapes.
+- [P3] (confidence: 7/10) `src/pro.js`: **unsafe Markdown.** Any https string was accepted. A `)` in `funding` could close the footer link and inject an image or a tracking link into the written file. Only the package author controls `package.json`, so this isn't a transcript boundary.
+  - Fix: the URL must be `https://` with no whitespace, brackets or parentheses. Unit-tested, including a `)![x](…)` payload.
+- [P3] `test/m2.test.js`: temp file names used `Math.random()`. They now use a counter, so they're deterministic.
+
+**Checked, nothing to fix:**
+- **SQL, races, N+1:** none. The pass adds no database and no new write path. The footer rides on the existing `--out` write.
+- **Unsafe HTML or Markdown:** the footer is static text, not transcript data. Transcript text still goes through `md()`, and the existing tests that neutralise images, links and HTML from transcripts still pass with the footer in the file. The footer still passes through `clean()`, and R1 asserts the link survives it intact.
+- **Secrets:**
+  - The license value is only tested for presence. A test asserts it never reaches the file, stdout or stderr.
+  - The test license is built at runtime.
+  - No credential-shaped string was added to any file.
+- **Enum and value completeness:** the one new value is the env var name `OVERNIGHT_RECEIPTS_LICENSE`. It's read only in `src/pro.js` (through `LICENSE_ENV`), and `runCli` clears it so a developer's shell can't change test results. The README and the footer name it identically, and R1/R4 assert it.
+- **Shell injection, LLM trust boundary:** not touched.
+- **Time windows:** the byte-for-byte R2 test uses a fixed `--since` date, not `48h`. Two runs a minute apart therefore render the same header.
+- **Offline:** the M3 network trap still runs `--out`, which now writes the footer, and sees only `git`.
+
+**Left (none CRITICAL):**
+- [P2] (confidence: 7/10) **User-visible change.** Every `--out` file now ends with a sales line. Fix-First says to ask about this, and nobody was available, so it was decided from REVENUE.md ("the Pro link goes in … the `--markdown` output footer"). It's limited to the Markdown file, it's one line, and a supporter license turns it off. Revisit if users object.
+- [P3] (confidence: 6/10) **The link leads to a page with nothing to buy yet.** The README's Pro section says so plainly, and M3 adds the checkout. Medium confidence that this matters: it holds only until M3 lands in this same run.
+- [P3] **Honour system.** Anyone can hide the footer without paying. This is deliberate, matching REVENUE.md's own "paying is a courtesy, not a gate".
+- [P3] **Version.** `package.json` is still 0.3.0. The sandbox wouldn't show the version history, so the convention couldn't be checked. Bump it when publishing, since the Markdown output changed.
+- [P3] **Demo not run.** `npm run demo` was blocked in this sandbox. Its `--out` path is the same CLI path that R1 and R2 check byte for byte.
+- [P3] **Non-atomic `--out` write.** The `--out` file is written in place, not atomically. This predates the pass and is unchanged; the digest's write is atomic.
+
+## M1 plan (2026-10-11)
 
 Built non-interactively from PRD.md, ROADMAP.md (M1) and REVIEW.md. Nobody was available to answer questions, so each decision is written down here with its reason.
 
@@ -150,7 +776,7 @@ Other codepaths are covered too:
 - a session's branch with no new commits
 - the CLI's `--help`, a bad `--since`, not a git repo, an unknown `--base`, Markdown escaping (HTML, images, links), and other-project/old sessions
 
-## What it does now
+## M1: what it did (2026-10-11)
 
 `dawnlog [--since 12h] [--repo PATH] [--base BRANCH] [--out FILE.md]`:
 1. Reads the Claude Code session logs in `~/.claude/projects` (or `$CLAUDE_CONFIG_DIR/projects`) that were active in the window.
@@ -202,7 +828,7 @@ Unmatched sessions (1)
 - Everything printed or written is secret-redacted (12 formats) and stripped of terminal escape codes.
 - Read-only and offline: the only subprocess is `git`, and there are no network calls.
 
-## Run it locally
+## M1: run it locally (old command name)
 
 Requires Node ≥ 22 and git. There are no dependencies and nothing to install or build.
 
@@ -214,7 +840,7 @@ node bin/dawnlog.js --repo ~/Documents/Repos/RepoHQ --since 24h --out /tmp/dawnl
 npm link && dawnlog --since 12h            # put `dawnlog` on PATH (npm link sets the exec bit)
 ```
 
-## Deploy (free tier)
+## M1: deploy notes (2026-10-11)
 
 There's nothing to host: it's a local CLI. Both distribution routes are $0:
 - **From GitHub, no publish step:** once the repo is pushed and public, run `npx github:<owner>/dawnlog --since 12h`. This works because there's no build and no dependencies.
@@ -222,7 +848,7 @@ There's nothing to host: it's a local CLI. Both distribution routes are $0:
 
 No API keys, accounts or paid services are used at runtime.
 
-## Exit criteria
+## M1 exit criteria (2026-10-11)
 
 All 7 M1 exit criteria pass (`npm test`: 152 tests, 0 failures):
 
@@ -236,7 +862,7 @@ All 7 M1 exit criteria pass (`npm test`: 152 tests, 0 failures):
 | 6 | Unmatched sessions listed, never dropped | ✅ | `cli.test.js` › exit 6; `report.test.js` › every session lands in exactly one place |
 | 7 | No `~/.claude/projects` → exit 0 + clear message | ✅ | `cli.test.js` › exit 7 |
 
-## M2 and M3
+## M2 and M3 (first build, 2026-10-11)
 
 ### Decisions
 
@@ -284,7 +910,9 @@ All 228 tests pass (`npm test`, about 6 s).
 - **RepoHQ and ai-stack, `--since 3d`.** 0.4–0.7 s each, and `--json` passes the schema. The 7 sessions found were placed or explained as listed in the PRD status table. Squash detection took RepoHQ from 16 receipts to 3.
 - **`claude -p` flags.** The exact `--summarize` flags ran against the real `claude` 2.1.296 with a trivial prompt and no API key in the environment.
 
-## What's left
+## What was left after the first M3 (2026-10-11)
+
+Superseded by [What's left](#whats-left) above. Kept for the record.
 
 **Needs real use (PRD metrics):**
 - The proof test: at least 9 of 10 real overnight sessions on the right branch.
@@ -304,7 +932,7 @@ All 228 tests pass (`npm test`, about 6 s).
 - The npm name `dawnlog` was taken by an unrelated standup-report CLI (yyalim/dawnlog), so the project is now **overnight-receipts** (free on npm on 2026-10-11). The repo is public, so `npx github:smithdavedesign/overnight-receipts` works now; `npm publish` is optional.
 - An optional GitHub Actions test workflow.
 
-## Review
+## M1 review (2026-10-11)
 
 This was a self-review against the gstack pre-landing checklist ("Review Categories", "Fix-First Heuristic"). Every file is new, so `git diff` was empty and the review was a full read of `bin/`, `src/`, `test/` and `scripts/`.
 

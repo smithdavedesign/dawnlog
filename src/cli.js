@@ -8,6 +8,7 @@ import { parseArgs } from 'node:util';
 import { renderDigest, writeAtomic } from './digest.js';
 import * as entire from './entire.js';
 import * as git from './git.js';
+import { proFooter } from './pro.js';
 import { clean } from './redact.js';
 import { renderJson, renderMarkdown, renderText } from './render.js';
 import { buildReport } from './report.js';
@@ -103,7 +104,7 @@ export function main(argv, env = process.env, now = Date.now()) {
   let stderr = '';
   if (args.out) {
     try {
-      fs.writeFileSync(args.out, clean(renderMarkdown(report, window)));
+      fs.writeFileSync(args.out, clean(renderMarkdown(report, { ...window, footer: proFooter(env) })));
     } catch (err) {
       return result(1, stdout, `overnight-receipts: could not write ${args.out}: ${err.message}\n`);
     }

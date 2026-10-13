@@ -1,12 +1,34 @@
 # overnight-receipts — morning triage receipts for overnight AI agent runs
 
+## Screenshots
+
+![The storefront's landing page on a desktop: the pitch, the free install line, a sample receipt and the Pro box with the Buy button](docs/screenshots/home-desktop.png)
+The storefront (`site/`, served locally by `site/serve.js` with `vercel.json`'s CSP) shows the install line and a sample receipt. With `PRO_CHECKOUT_URL` set (a stand-in test link here), the $12 Buy button and the terms and privacy links are above the fold.
+
+![The landing page on an iPhone 13](docs/screenshots/home-mobile.png)
+The same page on a phone: one column, and the install line wraps instead of running off the screen.
+
+![The real CLI on the demo fixture: ranked terminal receipts on the left, the end of the --out Markdown file with its Pro footer on the right](docs/screenshots/receipts-desktop.png)
+`npm run demo` runs the real CLI on a fixture repo. Receipts are ranked FAILED first, the planted token shows as `[REDACTED]`, and the Markdown file ends with the Pro link.
+
+![The same CLI run on a phone-sized page](docs/screenshots/receipts-mobile.png)
+The same real run, readable at phone width.
+
+![The thanks page after checkout: the license line built from the Checkout Session id](docs/screenshots/license-desktop.png)
+After payment, Stripe redirects to `thanks.html?session_id=…`. The page turns the (stand-in) session id into the `export OVERNIGHT_RECEIPTS_LICENSE="…"` line, which hides the footer.
+
+![The thanks page on an iPhone 13, with the long license string wrapped](docs/screenshots/license-mobile.png)
+On a phone the license string wraps, so all of it is visible to copy.
+
+_Made with `npm run screenshots` (Playwright and the system Chromium, sample data only)._
+
 _Formerly **dawnlog**: renamed 2026-10-11 because the npm name `dawnlog` belongs to an unrelated tool. The old GitHub URL redirects here._
 
 For developers who let Claude Code run unattended, it reads the session logs already on disk plus git branches and prints a per-branch receipt of what the agent decided, retried, skipped and verified, ranked for merge/fix/kill.
 
 - [Research](RESEARCH.md): findings and sources
 - [PRD](PRD.md): what it's for, with a status table of what's built
-- [Roadmap](ROADMAP.md): M1–M3, all done
+- [Roadmap](ROADMAP.md): M1–M3, all done, including the storefront
 - [Build notes](BUILD.md): decisions, architecture, test plan, what's left
 
 Effort: Low · Confidence: Medium · License: [MIT](LICENSE)
@@ -151,11 +173,25 @@ If the repo has [Entire](https://entire.io)'s metadata branch (`entire/checkpoin
 - **Escaped Markdown.** Transcript text in Markdown can't inject HTML, images or links.
 - **Shell-safe git calls.** Branch names and transcript strings never reach a shell. git is called with argument arrays and full `refs/heads/` names.
 
+## Pro
+
+overnight-receipts is free and MIT, and it stays that way: everything in this README works without paying. **Pro is $12 once**, for people it saves a morning or two. The money pays for keeping the parser in step with each Claude Code release.
+
+What paying changes:
+- **The footer goes away.** The Markdown file written by `--out` ends with a one-line link to this section. Set `OVERNIGHT_RECEIPTS_LICENSE` to the license string you get after paying, and the line is gone.
+- **The terminal, `--json` and the digest are never affected.** They don't show the line, licensed or not.
+
+It's an honour system. Any non-blank value hides the line, and nothing is checked, sent or logged; the tool stays offline.
+
+**Where to buy.** The storefront in [`site/`](site/) is built: a landing page with the Buy button (a Stripe Payment Link), the terms, the privacy policy, and a thank-you page that gives you your license string after payment. It deploys to a free static host. Checkout opens once the storefront is live and the Payment Link is switched on, and this section will link to it then. Until then there's nothing to buy. Refunds will be open for 30 days, no questions asked.
+
 ## Development
 
 ```sh
-npm test        # 228 tests (node:test, no installs), ~6 s
+npm test        # 265 tests (node:test, no installs), ~4 s
 UPDATE_GOLDEN=1 node --test test/m2.test.js   # after an intended ranking change; review the diff of test/golden/ranking.txt
+npm run site:preview                          # build the storefront to dist/ and serve it on http://127.0.0.1:4173/
+npm install && CHROMIUM_PATH=/path/to/chromium npm run screenshots   # regenerate docs/screenshots/ (never downloads a browser)
 ```
 
 | Path | What |
@@ -171,6 +207,12 @@ UPDATE_GOLDEN=1 node --test test/m2.test.js   # after an intended ranking change
 | `src/summarize.js` | `--summarize` via `claude -p` |
 | `src/digest.js` | `overnight-receipts digest` rendering and atomic write |
 | `src/render.js` | terminal, Markdown and JSON output |
+| `src/pro.js` | the Pro footer in the Markdown file, and the license variable that hides it |
 | `src/redact.js` | secret redaction and escape stripping |
 | `schema/receipts.schema.json` | the `--json` schema |
-| `test/` | fixture-driven tests: `cli` (M1), `m2`, `m3` exit criteria; unit tests per module; `perf` |
+| `site/pages/` | the storefront: landing, terms, privacy, thanks, stylesheet, `license.js` (session id → license line) |
+| `site/build.js` | `npm run site:build`: fills in the price and license variable from `src/pro.js` and the Buy button from `PRO_CHECKOUT_URL`, then writes `dist/` and `dist/_headers` (the same headers, for Cloudflare Pages) |
+| `site/serve.js` | local preview of `dist/` with `vercel.json`'s headers (127.0.0.1 only) |
+| `vercel.json` | Vercel build settings and security headers (CSP, no-referrer) |
+| `scripts/screenshots.mjs` | `npm run screenshots`: builds and serves the site, runs the demo, captures `docs/screenshots/` |
+| `test/` | fixture-driven tests: `cli` (M1), `m2`, `m3` and `storefront` exit criteria; unit tests per module; `perf` |

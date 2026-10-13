@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Privacy · overnight-receipts</title>
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="index.html">overnight-receipts</a>
+  <nav><a href="index.html#pro">Pro</a> <a href="{{REPO_URL}}">GitHub</a></nav>
+</header>
+<main class="doc">
+  <h1>Privacy</h1>
+  <p class="note">Effective 13 October 2026. The short version: the tool keeps everything on your machine, this site keeps nothing, and Stripe handles payments.</p>
+
+  <h2>The tool</h2>
+  <p>overnight-receipts runs on your machine. It is read-only: it reads the Claude Code session logs in <code>~/.claude/projects</code> and your git repositories, and it writes only the files you name with <code>--out</code>. Nothing is uploaded. There is no telemetry, no account and no update check. Without <code>--summarize</code>, the only program it runs is <code>git</code>, and it opens no network connection (its tests check this).</p>
+  <p>With <code>--summarize</code>, it runs your own <code>claude</code> command-line tool. That sends each receipt's facts and the agent's final message, secret-redacted first, to Anthropic, under your account and Anthropic's terms. Leave the option off and nothing is sent.</p>
+  <p>Redaction is best-effort. It covers 12 token formats in everything the tool prints or writes. A format it doesn't know will show, so review a file before you share it.</p>
+  <p>The license string in <code>{{LICENSE_ENV}}</code> is never checked, logged or sent anywhere.</p>
+
+  <h2>This website</h2>
+  <p>This site sets no cookies and runs no analytics. Its pages load nothing from other sites: no fonts, no trackers, no third-party scripts. Vercel hosts it and keeps standard request logs (IP address, browser, page, time) for a short period, under <a href="https://vercel.com/legal/privacy-policy">Vercel's privacy policy</a>.</p>
+
+  <h2>Buying Pro</h2>
+  <p>When you buy, you're on Stripe's checkout page. Stripe collects your card details, email address and billing details under <a href="https://stripe.com/privacy">Stripe's privacy policy</a>. Card details never reach the maintainer.</p>
+  <p>The maintainer sees what Stripe's dashboard shows for a payment: your name, email address, country, the amount and the checkout session id (your license string). This is used only to send receipts, handle refunds, resend a lost license string and answer you. It's never sold or shared, and it's kept only as long as tax and accounting rules require.</p>
+  <p>After paying, Stripe sends you to a thank-you page with the session id in its address. That page shows the id to you and sends it nowhere. The page isn't indexed by search engines, and its links pass no referrer.</p>
+
+  <h2>Your choices</h2>
+  <p>To see or delete what's held about your purchase, reply to your Stripe receipt. Records that tax rules require are kept for as long as they require; everything else is deleted.</p>
+</main>
+<footer class="foot">
+  <a href="terms.html">Terms</a> · <a href="privacy.html">Privacy</a> · <a href="{{REPO_URL}}">Source (MIT)</a>
+</footer>
+</body>
+</html>
