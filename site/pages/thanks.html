@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Thank you · overnight-receipts Pro</title>
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="index.html">overnight-receipts</a>
+  <nav><a href="{{REPO_URL}}">GitHub</a></nav>
+</header>
+<main class="doc">
+  <h1>Thank you</h1>
+  <p class="lede">Your payment went through, and Stripe is emailing you a receipt. Thanks for keeping overnight-receipts going.</p>
+
+  <h2>Your license</h2>
+  <div id="license" class="license" hidden>
+    <p>Add this line to your shell profile (<code>~/.zshrc</code> or <code>~/.bashrc</code>):</p>
+    <pre class="cmd"><code>export {{LICENSE_ENV}}="<span id="license-value"></span>"</code></pre>
+    <p class="note">Keep it if you like: it's your Stripe checkout session id, so it identifies your payment if you ever write in.</p>
+  </div>
+  <p id="license-missing" class="note">Your license string shows here when you arrive from checkout. If it doesn't, reply to your Stripe receipt and it will be sent to you. It's an honour system, so until then any non-blank value in <code>{{LICENSE_ENV}}</code> works.</p>
+
+  <h2>What changes</h2>
+  <p>The next Markdown file you write with <code>--out</code> ends without the Pro line. Nothing else changes, and nothing is checked or sent: the tool stays offline.</p>
+  <p>Changed your mind? Refunds are open for 30 days: reply to the receipt. See the <a href="terms.html">terms</a>.</p>
+</main>
+<footer class="foot">
+  <a href="terms.html">Terms</a> · <a href="privacy.html">Privacy</a> · <a href="{{REPO_URL}}">Source (MIT)</a>
+</footer>
+<script type="module" src="license.js"></script>
+</body>
+</html>

@@ -2,6 +2,8 @@
 //   - ranking order matches a golden file for the fixture set
 //   - each receipt field carries a `source: file:line`
 //   - --json validates against a schema
+//   - revenue (REVENUE.md): the Markdown file carries a Pro footer that a supporter license hides,
+//     nothing else does, and the README section it links to exists
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -14,6 +16,10 @@ after(cleanup);
 
 const GOLDEN = fileURLToPath(new URL('golden/ranking.txt', import.meta.url));
 const SCHEMA = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../schema/receipts.schema.json', import.meta.url)), 'utf8'));
+const PKG = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'));
+const README = fs.readFileSync(fileURLToPath(new URL('../README.md', import.meta.url)), 'utf8');
+// A stand-in supporter license, built at runtime like the other fake values in these tests.
+const LICENSE = ['supporter', 'L1c3nse'.repeat(3)].join('-');
 
 /** Nine branches, one per triage rule. Times are relative to now; the ranking doesn't depend on them. */
 function triageFixture() {
@@ -226,5 +232,117 @@ describe('triage details', () => {
     const out = runCli(['--since', '24h', '--repo', repo], { home });
     assert.match(out.stdout, /scope: 1 file outside src\/search: deploy\/prod\.sh/);
     assert.match(out.stdout, /suggest: merge — tests pass; review 1 out-of-area file first/);
+  });
+});
+
+describe('M2 revenue: the Pro link (REVENUE.md)', () => {
+  let pro;
+  let f;
+  // A date two days back: unlike "48h" it doesn't move between runs, so two files can be compared byte for byte.
+  const since = new Date(Date.now() - 48 * HOUR).toISOString().slice(0, 10);
+  const url = () => PKG.funding?.url;
+
+  before(async () => {
+    pro = await import('../src/pro.js');
+    const now = Date.now();
+    const repo = makeRepo({ branches: [{ name: 'feat', commits: [{ at: now - HOUR + 3 * MIN, files: { 'src/feat.js': 'x\n' }, message: 'Feature' }] }] });
+    const { home, projects } = makeHome();
+    writeSession(projects, { id: 'pro00000-0000-4000-8000-000000000000', cwd: repo, gitBranch: 'feat', start: now - HOUR, prompt: 'Build the feature', bash: [{ command: 'npm test', exit: 0 }] });
+    f = { repo, home };
+  });
+
+  /** Runs with --out; returns the Markdown file plus the run's stdout/stderr. */
+  const withOut = (env = {}, extra = []) => {
+    const out = path.join(tmpDir('pro'), 'r.md');
+    const r = runCli(['--since', since, '--repo', f.repo, '--out', out, ...extra], { home: f.home, env });
+    assert.equal(r.code, 0, r.stderr);
+    return { ...r, file: fs.readFileSync(out, 'utf8') };
+  };
+
+  test('exit R1: the --out Markdown file ends with a Pro footer linking package.json funding.url', () => {
+    const { file } = withOut();
+    const lines = file.split('\n');
+    assert.equal(lines.at(-1), '', 'ends with a newline');
+    const footer = lines.at(-2);
+    assert.deepEqual(lines.slice(-5, -2), ['', '---', ''], 'a blank line before the rule, so it is not read as a heading');
+    assert.ok(footer.includes(`[Pro, ${pro.PRO_PRICE} once](${url()})`), footer);
+    assert.match(footer, /`OVERNIGHT_RECEIPTS_LICENSE`/);
+    assert.equal(file.split(url()).length - 1, 1, 'the link appears once, intact after redaction');
+    assert.match(file, /^## 1\. `feat` — PASSED$/m, 'the receipts are still there, above the footer');
+  });
+
+  test('exit R2: OVERNIGHT_RECEIPTS_LICENSE hides the footer and changes nothing else; the value is never printed', () => {
+    const free = withOut();
+    const paid = withOut({ OVERNIGHT_RECEIPTS_LICENSE: LICENSE });
+    assert.ok(!paid.file.includes(url()), paid.file);
+    assert.ok(free.file.startsWith(paid.file), 'the licensed file is the free one minus the footer');
+    assert.equal(free.file.slice(paid.file.length), `\n---\n\n${pro.proFooter({})}\n`);
+    for (const text of [paid.file, paid.stdout, paid.stderr]) assert.ok(!text.includes(LICENSE), 'license value printed');
+  });
+
+  test('exit R2: a blank license counts as unset', () => {
+    assert.ok(withOut({ OVERNIGHT_RECEIPTS_LICENSE: ' \t' }).file.includes(url()));
+    assert.ok(withOut({ OVERNIGHT_RECEIPTS_LICENSE: '' }).file.includes(url()));
+  });
+
+  test('exit R3: the footer is only in the Markdown file: not in the terminal, stderr, --json or the digest', () => {
+    const run = withOut();
+    const json = runCli(['--since', since, '--repo', f.repo, '--json'], { home: f.home });
+    assert.deepEqual(validate(SCHEMA, JSON.parse(json.stdout)), []);
+    const outputs = { stdout: run.stdout, stderr: run.stderr, json: json.stdout };
+    for (const format of ['text', 'md']) {
+      const out = path.join(tmpDir('pro'), `digest.${format}`);
+      assert.equal(runCli(['digest', '--since', since, '--repo', f.repo, '--format', format, '--out', out], { home: f.home }).code, 0);
+      outputs[`digest ${format}`] = fs.readFileSync(out, 'utf8');
+    }
+    assert.match(outputs.stdout, /^\[1\] feat — PASSED$/m, 'the outputs are real receipts');
+    for (const [name, text] of Object.entries(outputs)) {
+      assert.ok(!text.includes(url()), `${name} carries the Pro link`);
+      assert.ok(!text.includes('OVERNIGHT_RECEIPTS_LICENSE'), `${name} carries the footer`);
+    }
+  });
+
+  test('exit R4: the link target exists: package.json funding, the code and the README Pro section agree', () => {
+    assert.equal(typeof PKG.funding.type, 'string', 'npm fund shape: { type, url }');
+    assert.equal(new URL(PKG.funding.url).protocol, 'https:');
+    assert.equal(new URL(PKG.funding.url).hash, '#pro', 'links to the README "## Pro" heading');
+    assert.equal(pro.PRO_URL, PKG.funding.url);
+    const section = README.split(/^## /m).find((s) => s.startsWith('Pro\n'));
+    assert.ok(section, 'README has a "## Pro" heading');
+    assert.ok(section.includes(`${pro.PRO_PRICE} once`), 'README states the price the footer states');
+    assert.ok(section.includes('OVERNIGHT_RECEIPTS_LICENSE'), 'README says how a supporter hides the footer');
+  });
+
+  test('proFooter: null with a license or without a URL, the footer line otherwise', () => {
+    assert.equal(pro.proFooter({ OVERNIGHT_RECEIPTS_LICENSE: LICENSE }), null);
+    assert.equal(pro.proFooter({}, null), null);
+    assert.equal(pro.proFooter({}, ''), null);
+    const line = pro.proFooter({});
+    assert.equal(typeof line, 'string');
+    assert.ok(!line.includes('\n'), 'one line');
+    assert.ok(line.includes(`(${pro.PRO_URL})`));
+  });
+
+  test('fundingUrl: every npm funding shape, and no URL (so no footer) for a missing file, bad JSON or a non-https link', () => {
+    const dir = tmpDir('funding');
+    const write = (name, text) => {
+      const file = path.join(dir, name);
+      fs.writeFileSync(file, text);
+      return file;
+    };
+    const link = 'https://example.com/pro';
+    let n = 0;
+    const pkg = (funding) => write(`package-${(n += 1)}.json`, JSON.stringify({ name: 'x', funding }));
+    assert.equal(pro.fundingUrl(pkg(link)), link);
+    assert.equal(pro.fundingUrl(pkg({ type: 'individual', url: link })), link);
+    assert.equal(pro.fundingUrl(pkg([{ type: 'individual', url: link }, 'https://example.org/other'])), link);
+    assert.equal(pro.fundingUrl(pkg([link])), link);
+    assert.equal(pro.fundingUrl(pkg(undefined)), null);
+    assert.equal(pro.fundingUrl(pkg('javascript:alert(1)')), null);
+    assert.equal(pro.fundingUrl(pkg({ url: 'http://example.com/pro' })), null);
+    assert.equal(pro.fundingUrl(pkg({ url: 'https://example.com/a b' })), null);
+    assert.equal(pro.fundingUrl(pkg({ url: 'https://example.com/a)![x](https://example.com/p.png' })), null, 'cannot close the link early');
+    assert.equal(pro.fundingUrl(write('bad.json', '{ nope')), null);
+    assert.equal(pro.fundingUrl(path.join(dir, 'missing.json')), null);
   });
 });

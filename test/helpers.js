@@ -208,6 +208,7 @@ export function runCli(args, { home, cwd, env = {}, node = [] } = {}) {
   delete childEnv.CLAUDE_CONFIG_DIR;
   delete childEnv.NODE_TEST_CONTEXT;
   delete childEnv.OVERNIGHT_RECEIPTS_CLAUDE;
+  delete childEnv.OVERNIGHT_RECEIPTS_LICENSE;
   Object.assign(childEnv, env);
   const result = spawnSync(process.execPath, [...node, BIN, ...args], { cwd: cwd ?? home, env: childEnv, encoding: 'utf8' });
   return { code: result.status, stdout: result.stdout, stderr: result.stderr };

@@ -143,8 +143,8 @@ export function renderText(report, { window }) {
   return `${out.join('\n').trimEnd()}\n`;
 }
 
-/** @param {{ window: string }} options */
-export function renderMarkdown(report, { window }) {
+/** @param {{ window: string, footer?: string | null }} options footer: a static closing line (the Pro link), not transcript data */
+export function renderMarkdown(report, { window, footer = null }) {
   const name = report.repo.split(/[\\/]/).filter(Boolean).at(-1) ?? report.repo;
   const out = [
     `# overnight-receipts — ${md(name)}`,
@@ -187,7 +187,9 @@ export function renderMarkdown(report, { window }) {
   }
 
   for (const note of notes(report)) out.push(`> note: ${md(note)}`, '');
-  return `${out.join('\n').trimEnd()}\n`;
+  const body = out.join('\n').trimEnd();
+  // The blank line keeps "---" a rule: straight after a paragraph it would make that paragraph a heading.
+  return footer ? `${body}\n\n---\n\n${footer}\n` : `${body}\n`;
 }
 
 const iso = (ms) => (ms === null || ms === undefined ? null : new Date(ms).toISOString());
