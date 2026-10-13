@@ -1,4 +1,4 @@
-// thanks.html: after payment, the Stripe Payment Link redirects here with ?session_id={CHECKOUT_SESSION_ID}.
+// thanks.html (served at /thanks): after payment, the Stripe Payment Link redirects here with ?session_id={CHECKOUT_SESSION_ID}.
 // That Checkout Session id is the buyer's license string. The CLI only checks that one is set (honour system),
 // and the maintainer can find the payment by it for a refund or a lost string. Written with textContent only.
 export const SESSION_ID = /^cs_(?:test|live)_[A-Za-z0-9]{16,250}$/;

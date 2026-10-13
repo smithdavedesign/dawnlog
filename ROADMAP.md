@@ -2,7 +2,7 @@
 
 _Renamed from **dawnlog** to **overnight-receipts** on 2026-10-11 (the npm name was taken). Notes below were written under the old name; the command is now `overnight-receipts`, the env vars `OVERNIGHT_RECEIPTS_*`._
 
-**Status (2026-10-11): M1, M2 and M3 are built, and every exit criterion has a passing test.** How each criterion is tested is in [BUILD.md](BUILD.md). **2026-10-13:** an MVP run added REVENUE.md's parts. M2's revenue criteria (the Pro link) and M3's storefront criteria (S1–S6) pass. Taking money now needs only non-code steps: the launch checklist in BUILD.md › What's left.
+**Status (2026-10-11): M1, M2 and M3 are built, and every exit criterion has a passing test.** How each criterion is tested is in [BUILD.md](BUILD.md). **2026-10-13:** an MVP run added REVENUE.md's parts. M2's revenue criteria (the Pro link) and M3's storefront criteria (S1–S6) pass. Taking money now needs only non-code steps: the launch checklist in BUILD.md › What's left. **Go-live pass (2026-10-13):** search and sharing tags, robots.txt, sitemap, share image, clean URLs, RepoHQ's visit beacon and `.provision`. What's left for David is in [LAUNCH-READY.md](LAUNCH-READY.md).
 
 ## M1 — Weekend: branch receipts from Claude Code logs ✅
 Deliverables: Node CLI `dawnlog`; JSONL session parser; git branch scanner; session→branch matcher; Markdown + terminal receipt; secret redaction.
@@ -38,11 +38,11 @@ Exit criteria: with `--summarize` absent, zero subprocess or network calls other
 **Revenue: the storefront (added 2026-10-13 from REVENUE.md: a landing page with terms and privacy, a $12 Stripe Payment Link, and a success page that shows a license string).** It's a static site in `site/`, built to `dist/`. Vercel's free tier hosts it before launch. Once checkout is on, it moves to Cloudflare Pages' free plan, because Vercel Hobby is non-commercial only; the build writes `_headers` for it (see BUILD.md › Deploy). Exit criteria, all tested in `test/storefront.test.js`:
 - ✅ S1. `npm run site:build` writes the static site to `dist/`: landing, terms, privacy, thanks, CSS and JS. Every internal link and asset resolves, and no template placeholder is left.
 - ✅ S2. The landing page says what the tool is and gives the free install line. It shows the price from `PRO_PRICE`, with terms and privacy links next to the buy button.
-- ✅ S3. `PRO_CHECKOUT_URL` is the checkout switch:
+- ✅ S3. `STRIPE_PAYMENT_LINK` (named `PRO_CHECKOUT_URL` until the go-live pass) is the checkout switch:
   - set to a `https://buy.stripe.com/…` link, the Buy button links there
   - unset or blank, there's no checkout link anywhere and the page says "Checkout opens soon"
   - any other value fails the build without printing the value
-- ✅ S4. Terms and privacy say it's local only, read-only and uploads nothing, that redaction is best-effort, and that it's provided as is. They also cover 30-day refunds, Stripe taking the payment, and no cookies or analytics on the site. Every page links both.
+- ✅ S4. Terms and privacy say it's local only, read-only and uploads nothing, that redaction is best-effort, and that it's provided as is. They also cover 30-day refunds, Stripe taking the payment, and no cookies or third-party analytics on the site (the go-live pass added RepoHQ's visit beacon, which the privacy page describes). Every page links both.
 - ✅ S5. The thanks page turns `?session_id=<Checkout Session id>` into `export OVERNIGHT_RECEIPTS_LICENSE="<id>"`. Anything else shows no line, plus a fallback that says how to get one. That string hides the CLI's Markdown footer.
 - ✅ S6. The site keeps its own privacy promise:
   - nothing loads from another origin

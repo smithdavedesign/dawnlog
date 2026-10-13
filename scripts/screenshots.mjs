@@ -5,17 +5,20 @@
 //   license   the thanks page Stripe redirects to, turning a (stand-in) Checkout Session id into the license line
 // Each at desktop size (1280×800) and on a phone (iPhone 13), viewport only. It builds the site into a temp dir,
 // starts site/serve.js, waits until it answers, drives Chromium from CHROMIUM_PATH (it never downloads a browser),
-// then stops the server. Any console error or CSP violation on a page fails the run.
+// then stops the server. Any console error or CSP violation on a page fails the run, and so does a beacon request:
+// Playwright sets navigator.webdriver, so the site must send nothing.
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, devices } from 'playwright-core';
+import { ENDPOINT } from '../site/pages/beacon.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const OUT = path.join(ROOT, 'docs', 'screenshots');
-// Stand-ins built at runtime, so nothing credential-shaped sits in the source.
+// A stand-in STRIPE_PAYMENT_LINK (the build accepts only buy.stripe.com links) and Checkout Session id, built at
+// runtime so nothing credential-shaped sits in the source.
 const CHECKOUT = ['https://buy.stripe.com', ['test', 'eVa5kD9xQ2'.repeat(2)].join('_')].join('/');
 const SESSION = ['cs', 'test', 'b1C2d3E4'.repeat(7)].join('_');
 const SIZES = [
@@ -26,7 +29,9 @@ const SIZES = [
 const escapeHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 function run(args, env = {}) {
-  const r = spawnSync(process.execPath, args, { cwd: ROOT, env: { ...process.env, ...env }, encoding: 'utf8' });
+  const base = { ...process.env };
+  for (const key of ['STRIPE_PAYMENT_LINK', 'SITE_URL', 'VERCEL_ENV', 'VERCEL_PROJECT_PRODUCTION_URL']) delete base[key];
+  const r = spawnSync(process.execPath, args, { cwd: ROOT, env: { ...base, ...env }, encoding: 'utf8' });
   if (r.status !== 0) throw new Error(`node ${args.join(' ')} exited ${r.status}\n${r.stderr}`);
   return r.stdout;
 }
@@ -88,19 +93,30 @@ let server;
 let browser;
 try {
   const siteDir = path.join(tmp, 'site');
-  process.stdout.write(run([path.join('site', 'build.js'), siteDir], { PRO_CHECKOUT_URL: CHECKOUT }));
+  // VERCEL_ENV=production, so the pages carry the beacon armed exactly as on the live site.
+  process.stdout.write(run([path.join('site', 'build.js'), siteDir], { STRIPE_PAYMENT_LINK: CHECKOUT, VERCEL_ENV: 'production' }));
   server = await startServer(siteDir);
+  for (const [file, type] of [['robots.txt', 'text/plain'], ['sitemap.xml', 'application/xml'], ['og.png', 'image/png']]) {
+    const res = await fetch(`${server.base}/${file}`);
+    if (!res.ok || !res.headers.get('content-type').startsWith(type)) throw new Error(`/${file}: ${res.status} ${res.headers.get('content-type')}`);
+  }
   const demo = run([path.join('scripts', 'demo.js')]);
 
   if (!process.env.CHROMIUM_PATH) throw new Error('set CHROMIUM_PATH to a Chromium binary (this script never downloads one)');
   browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH });
   fs.mkdirSync(OUT, { recursive: true });
 
+  const footerLinks = async (page) => (await page.locator('footer a[href="/terms"]').count()) === 1 && (await page.locator('footer a[href="/privacy"]').count()) === 1;
   const views = [
     {
       name: 'home',
       open: (page) => page.goto(`${server.base}/`),
-      check: async (page) => (await page.getAttribute('#buy', 'href')) === CHECKOUT && (await page.isVisible('#buy')),
+      check: async (page) =>
+        (await page.getAttribute('#buy', 'href')) === CHECKOUT &&
+        (await page.isVisible('#buy')) &&
+        (await footerLinks(page)) &&
+        (await page.getAttribute('link[rel="canonical"]', 'href')) !== null &&
+        (await page.getAttribute('meta[property="og:image"]', 'content')).endsWith('/og.png'),
     },
     {
       name: 'receipts',
@@ -109,8 +125,9 @@ try {
     },
     {
       name: 'license',
-      open: (page) => page.goto(`${server.base}/thanks.html?session_id=${SESSION}`),
-      check: async (page) => (await page.isVisible('#license')) && (await page.textContent('#license-value')) === SESSION && !(await page.isVisible('#license-missing')),
+      open: (page) => page.goto(`${server.base}/thanks?session_id=${SESSION}`),
+      check: async (page) =>
+        (await page.isVisible('#license')) && (await page.textContent('#license-value')) === SESSION && !(await page.isVisible('#license-missing')) && (await footerLinks(page)),
     },
   ];
 
@@ -121,6 +138,7 @@ try {
       const problems = [];
       page.on('console', (msg) => msg.type() === 'error' && problems.push(msg.text()));
       page.on('pageerror', (err) => problems.push(err.message));
+      page.on('request', (req) => req.url().startsWith(new URL(ENDPOINT).origin) && problems.push(`beacon sent from an automated browser: ${req.url()}`));
       await view.open(page);
       await page.waitForLoadState('networkidle');
       if (!(await view.check(page))) throw new Error(`${view.name}-${size.suffix}: the page is not in the expected state`);
