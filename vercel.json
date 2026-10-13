@@ -3,18 +3,19 @@
   "framework": null,
   "buildCommand": "npm run site:build",
   "outputDirectory": "dist",
+  "cleanUrls": true,
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "Content-Security-Policy", "value": "default-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'" },
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; connect-src 'self' https://repohq.vercel.app; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'" },
         { "key": "Referrer-Policy", "value": "no-referrer" },
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), payment=()" }
       ]
     },
     {
-      "source": "/thanks.html",
+      "source": "/thanks",
       "headers": [
         { "key": "X-Robots-Tag", "value": "noindex" },
         { "key": "Cache-Control", "value": "no-store" }

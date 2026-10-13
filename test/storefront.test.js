@@ -1,7 +1,7 @@
 // ROADMAP M3 revenue exit criteria: the storefront (REVENUE.md), a static site in site/ built to dist/.
 //   S1 the build writes every page, links resolve, no placeholder is left
 //   S2 the landing page: what it is, the free install line, the price, terms and privacy by the buy button
-//   S3 PRO_CHECKOUT_URL switches checkout on; unset means "opens soon"; anything else fails the build
+//   S3 STRIPE_PAYMENT_LINK switches checkout on; unset means no Buy button; anything else fails the build
 //   S4 terms and privacy state REVENUE.md's commitments
 //   S5 the thanks page turns Stripe's session id into the license line, and that line hides the CLI footer
 //   S6 the site keeps its own privacy promise (no other origins, no inline code, CSP, no-referrer)
@@ -52,11 +52,17 @@ function byId(html, id) {
   return { tag: m[1], open: m[0], html: html.slice(m.index, end < 0 ? undefined : end + m[1].length + 3) };
 }
 const text = (html) => html.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ');
+/** The built file a same-site link points at, served like vercel.json's cleanUrls: / is index.html, /terms is terms.html. */
+const fileFor = (ref) => {
+  const p = ref.split(/[?#]/)[0].replace(/^\//, '');
+  if (!p) return 'index.html';
+  return path.extname(p) ? p : `${p}.html`;
+};
 
-/** Runs `node site/build.js DIR` with PRO_CHECKOUT_URL removed from the environment unless given. */
+/** Runs `node site/build.js DIR` with the build's env variables removed from the environment unless given. */
 function buildCli(out, env = {}) {
   const childEnv = { ...process.env };
-  delete childEnv.PRO_CHECKOUT_URL;
+  for (const key of ['STRIPE_PAYMENT_LINK', 'SITE_URL', 'VERCEL_ENV', 'VERCEL_PROJECT_PRODUCTION_URL']) delete childEnv[key];
   delete childEnv.NODE_TEST_CONTEXT;
   const r = spawnSync(process.execPath, [BUILD, out], { env: { ...childEnv, ...env }, encoding: 'utf8' });
   return { code: r.status, stdout: r.stdout, stderr: r.stderr };
@@ -75,8 +81,7 @@ describe('exit S1: npm run site:build writes the static site', () => {
       assert.match(body, /<title>[^<]+<\/title>/, `${page} title`);
       const refs = [...attrs(body, 'a', 'href'), ...attrs(body, 'link', 'href'), ...attrs(body, 'script', 'src')];
       for (const ref of refs.filter((r) => !/^(https:|mailto:|#)/.test(r))) {
-        const file = ref.split(/[?#]/)[0] || 'index.html';
-        assert.ok(fs.existsSync(path.join(out, file)), `${page} links ${ref}, which was not built`);
+        assert.ok(fs.existsSync(path.join(out, fileFor(ref))), `${page} links ${ref}, which was not built`);
       }
     }
   });
@@ -87,7 +92,7 @@ describe('exit S1: npm run site:build writes the static site', () => {
     assert.equal(off.code, 0, off.stderr);
     assert.ok(fs.existsSync(path.join(out, 'index.html')));
     assert.match(off.stdout, /checkout: off/);
-    const on = buildCli(out, { PRO_CHECKOUT_URL: CHECKOUT });
+    const on = buildCli(out, { STRIPE_PAYMENT_LINK: CHECKOUT });
     assert.equal(on.code, 0, on.stderr);
     assert.match(on.stdout, /checkout: on/);
     assert.ok(!on.stdout.includes(CHECKOUT) && !on.stderr.includes(CHECKOUT), 'the build never prints the env value');
@@ -123,7 +128,7 @@ describe('exit S1: npm run site:build writes the static site', () => {
 
 describe('exit S2: the landing page', () => {
   test('says what it is, gives the free install line and the price, and links terms and privacy by the buy button', () => {
-    const { html } = build({ PRO_CHECKOUT_URL: CHECKOUT });
+    const { html } = build({ STRIPE_PAYMENT_LINK: CHECKOUT });
     const page = html['index.html'];
     const words = text(page);
     assert.match(words, /overnight-receipts/);
@@ -136,8 +141,8 @@ describe('exit S2: the landing page', () => {
     assert.ok(box, 'a Pro section');
     assert.ok(text(box.html).includes(pro.PRO_PRICE));
     const links = attrs(box.html, 'a', 'href');
-    assert.ok(links.includes('terms.html'), 'terms next to the buy button');
-    assert.ok(links.includes('privacy.html'), 'privacy next to the buy button');
+    assert.ok(links.includes('/terms'), 'terms next to the buy button');
+    assert.ok(links.includes('/privacy'), 'privacy next to the buy button');
     assert.match(text(box.html), /refund/i);
     assert.match(words, /\[REDACTED\]/, 'the sample receipt shows redaction');
     assert.match(words, /suggest: fix/, 'the sample receipt shows triage');
@@ -150,7 +155,7 @@ describe('exit S2: the landing page', () => {
   });
 });
 
-describe('exit S3: PRO_CHECKOUT_URL is the checkout switch', () => {
+describe('exit S3: STRIPE_PAYMENT_LINK is the checkout switch', () => {
   test('checkoutUrl: a buy.stripe.com link is accepted (trimmed); unset or blank is off', () => {
     assert.equal(site.checkoutUrl(CHECKOUT), CHECKOUT);
     assert.equal(site.checkoutUrl(`  ${CHECKOUT}\n`), CHECKOUT);
@@ -174,14 +179,14 @@ describe('exit S3: PRO_CHECKOUT_URL is the checkout switch', () => {
     for (const bad of BAD) {
       assert.throws(
         () => site.checkoutUrl(bad),
-        (err) => err.message.includes('PRO_CHECKOUT_URL') && !err.message.includes(bad.trim()),
+        (err) => err.message.includes('STRIPE_PAYMENT_LINK') && !err.message.includes(bad.trim()),
         bad,
       );
     }
   });
 
   test('on: the Buy button links the Payment Link, and it is the only Stripe link in the site', () => {
-    const { html, result } = build({ PRO_CHECKOUT_URL: CHECKOUT });
+    const { html, result } = build({ STRIPE_PAYMENT_LINK: CHECKOUT });
     assert.equal(result.checkout, true);
     const buy = byId(html['index.html'], 'buy');
     assert.equal(buy.tag, 'a');
@@ -192,12 +197,13 @@ describe('exit S3: PRO_CHECKOUT_URL is the checkout switch', () => {
     assert.ok(!/opens soon/i.test(html['index.html']));
   });
 
-  test('off (unset or blank): no checkout link anywhere, and the page says checkout opens soon', () => {
-    for (const env of [{}, { PRO_CHECKOUT_URL: '' }, { PRO_CHECKOUT_URL: '   ' }]) {
+  test('off (unset or blank): the Buy button is hidden, no checkout link anywhere, and the page says checkout opens soon', () => {
+    for (const env of [{}, { STRIPE_PAYMENT_LINK: '' }, { STRIPE_PAYMENT_LINK: '   ' }]) {
       const { html, result } = build(env);
       assert.equal(result.checkout, false);
       const buy = byId(html['index.html'], 'buy');
       assert.notEqual(buy.tag, 'a', 'not a link');
+      assert.ok(!/Buy Pro/.test(text(html['index.html'])), 'no Buy button text');
       assert.match(text(buy.html), /Checkout opens soon/);
       for (const [page, body] of Object.entries(html)) assert.ok(!body.includes('buy.stripe.com'), `${page} links checkout`);
     }
@@ -206,13 +212,13 @@ describe('exit S3: PRO_CHECKOUT_URL is the checkout switch', () => {
   test('a set but invalid value fails the build (library and CLI) without printing it, and writes nothing', () => {
     for (const bad of BAD) {
       const out = path.join(tmpDir('site-bad'), 'dist');
-      assert.throws(() => site.buildSite({ out, env: { PRO_CHECKOUT_URL: bad } }), /PRO_CHECKOUT_URL/);
+      assert.throws(() => site.buildSite({ out, env: { STRIPE_PAYMENT_LINK: bad } }), /STRIPE_PAYMENT_LINK/);
       assert.ok(!fs.existsSync(out), 'nothing half-built');
     }
     const out = path.join(tmpDir('site-bad'), 'dist');
-    const r = buildCli(out, { PRO_CHECKOUT_URL: BAD[0] });
+    const r = buildCli(out, { STRIPE_PAYMENT_LINK: BAD[0] });
     assert.equal(r.code, 1);
-    assert.match(r.stderr, /PRO_CHECKOUT_URL/);
+    assert.match(r.stderr, /STRIPE_PAYMENT_LINK/);
     assert.ok(!r.stderr.includes(BAD[0]) && !r.stdout.includes(BAD[0]), 'the value is not printed');
   });
 });
@@ -232,7 +238,7 @@ describe('exit S4: terms and privacy', () => {
     assert.match(words, /lost/i, 'how to get a lost license string');
   });
 
-  test('the privacy page: local only, read-only, nothing uploaded; no cookies or analytics; who processes what', () => {
+  test('the privacy page: local only, read-only, nothing uploaded; no cookies or third-party analytics; who processes what', () => {
     const words = text(build().html['privacy.html']);
     assert.match(words, /runs on your machine/i);
     assert.match(words, /read-only/i);
@@ -241,7 +247,7 @@ describe('exit S4: terms and privacy', () => {
     assert.match(words, /--summarize/, 'the one option that sends anything, and where');
     assert.match(words, /best-effort/i);
     assert.match(words, /no cookies/i);
-    assert.match(words, /no analytics/i);
+    assert.match(words, /no third-party analytics/i);
     assert.match(words, /Stripe/);
     assert.match(words, /Vercel/);
     assert.match(words, /never sold/i);
@@ -251,8 +257,8 @@ describe('exit S4: terms and privacy', () => {
     for (const [page, body] of Object.entries(build().html)) {
       const footer = /<footer\b[\s\S]*?<\/footer>/.exec(body)?.[0] ?? '';
       const links = attrs(footer, 'a', 'href');
-      assert.ok(links.includes('terms.html'), `${page} footer links terms`);
-      assert.ok(links.includes('privacy.html'), `${page} footer links privacy`);
+      assert.ok(links.includes('/terms'), `${page} footer links terms`);
+      assert.ok(links.includes('/privacy'), `${page} footer links privacy`);
     }
   });
 });
@@ -341,9 +347,11 @@ describe('exit S6: the site keeps its own privacy promise', () => {
   const ALLOWED_LINK_HOSTS = new Set(['github.com', 'buy.stripe.com', 'stripe.com', 'vercel.com']);
 
   test('nothing loads from another origin; other-origin links go only to the allowed hosts', () => {
-    const { html, out } = build({ PRO_CHECKOUT_URL: CHECKOUT });
+    const { html, out } = build({ STRIPE_PAYMENT_LINK: CHECKOUT });
     for (const [page, body] of Object.entries(html)) {
-      for (const src of [...attrs(body, '[a-z]+', 'src'), ...attrs(body, 'link', 'href')]) {
+      // rel="canonical" names this page's own public URL; it loads nothing.
+      const loaded = (body.match(/<link\b[^>]*>/g) ?? []).filter((tag) => !/\srel="canonical"/.test(tag)).map((tag) => /\shref="([^"]*)"/.exec(tag)?.[1]);
+      for (const src of [...attrs(body, '[a-z]+', 'src'), ...loaded]) {
         assert.ok(!/^(https?:)?\/\//.test(src), `${page} loads ${src} from another origin`);
       }
       for (const href of attrs(body, 'a', 'href').filter((h) => /^(https?:)?\/\//.test(h))) {
@@ -359,6 +367,11 @@ describe('exit S6: the site keeps its own privacy promise', () => {
   test('no inline script or style, no event handlers (so the CSP needs no unsafe-inline)', () => {
     for (const [page, body] of Object.entries(build().html)) {
       for (const m of body.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)) {
+        // JSON-LD is a data block: browsers never run it, so the CSP doesn't apply. It must be plain JSON.
+        if (m[1] === ' type="application/ld+json"') {
+          assert.doesNotThrow(() => JSON.parse(m[2]), `${page}: JSON-LD parses`);
+          continue;
+        }
         assert.match(m[1], /\ssrc="/, `${page}: inline <script>`);
         assert.equal(m[2].trim(), '', `${page}: script with a body`);
       }
@@ -369,20 +382,23 @@ describe('exit S6: the site keeps its own privacy promise', () => {
     }
   });
 
-  test('vercel.json builds the site and serves it with a strict CSP, no-referrer and nosniff; thanks is noindex', () => {
+  test('vercel.json builds the site and serves it with clean URLs, a strict CSP, no-referrer and nosniff; thanks is noindex', async () => {
     const config = JSON.parse(fs.readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
     assert.equal(config.buildCommand, 'npm run site:build');
     assert.equal(config.outputDirectory, 'dist');
+    assert.equal(config.cleanUrls, true, '/terms and /privacy, as the canonical URLs and the sitemap say');
     const all = config.headers.find((h) => h.source === '/(.*)');
     const get = (rule, key) => rule?.headers.find((h) => h.key.toLowerCase() === key.toLowerCase())?.value;
     const csp = get(all, 'Content-Security-Policy');
     assert.match(csp, /(^|; )default-src 'self'(;|$)/);
+    const { ENDPOINT } = await import('../site/pages/beacon.js');
+    assert.match(csp, new RegExp(`(^|; )connect-src 'self' ${new URL(ENDPOINT).origin.replace(/[.]/g, '\\.')}(;|$)`), 'the beacon, and nothing else, may be sent off-site');
     assert.match(csp, /frame-ancestors 'none'/);
     assert.match(csp, /form-action 'none'/);
     assert.ok(!csp.includes('unsafe-inline') && !csp.includes('unsafe-eval'), csp);
     assert.equal(get(all, 'Referrer-Policy'), 'no-referrer');
     assert.equal(get(all, 'X-Content-Type-Options'), 'nosniff');
-    assert.equal(get(config.headers.find((h) => h.source === '/thanks.html'), 'X-Robots-Tag'), 'noindex');
+    assert.equal(get(config.headers.find((h) => h.source === '/thanks'), 'X-Robots-Tag'), 'noindex');
     // site/serve.js applies only these two source shapes locally; a new pattern must be taught to it first.
     for (const rule of config.headers) assert.match(rule.source, /^(\/\(\.\*\)|\/[\w.-]+)$/, `serve.js can't match ${rule.source}`);
   });
@@ -399,9 +415,9 @@ describe('exit S6: the site keeps its own privacy promise', () => {
     );
     const lines = (rule) => rule.headers.map(({ key, value }) => `  ${key}: ${value}`);
     assert.deepEqual(blocks['/*'], lines(config.headers.find((h) => h.source === '/(.*)')), 'every page: the same CSP and policies');
-    const thanks = lines(config.headers.find((h) => h.source === '/thanks.html'));
-    assert.deepEqual(blocks['/thanks.html'], thanks);
-    assert.deepEqual(blocks['/thanks'], thanks, 'Cloudflare Pages serves /thanks.html at /thanks too');
+    assert.deepEqual(blocks['/thanks'], lines(config.headers.find((h) => h.source === '/thanks')), 'Cloudflare Pages serves thanks.html at /thanks, like cleanUrls');
+    const legacy = site.headersFile([{ source: '/thanks.html', headers: [{ key: 'X-Robots-Tag', value: 'noindex' }] }]);
+    assert.match(legacy, /^\/thanks\.html\n {2}X-Robots-Tag: noindex\n\n\/thanks\n {2}X-Robots-Tag: noindex\n$/, 'an .html source covers its clean path too');
     assert.throws(() => site.headersFile([{ source: '/(.*)\\.js', headers: [] }]), /source/);
   });
 
@@ -448,15 +464,33 @@ describe('site/serve.js: the local preview the screenshots use', () => {
     assert.match(await home.text(), /overnight-receipts/);
     assert.match((await fetch(`${base}/style.css`)).headers.get('content-type'), /^text\/css/);
     assert.match((await fetch(`${base}/license.js`)).headers.get('content-type'), /^text\/javascript/);
-    assert.equal((await fetch(`${base}/thanks.html?session_id=${SESSION}`)).status, 200, 'query strings are ignored');
+    assert.equal((await fetch(`${base}/thanks?session_id=${SESSION}`)).status, 200, 'query strings are ignored');
+    assert.match((await fetch(`${base}/robots.txt`)).headers.get('content-type'), /^text\/plain/);
+    assert.match((await fetch(`${base}/sitemap.xml`)).headers.get('content-type'), /^application\/xml/);
+    assert.equal((await fetch(`${base}/og.png`)).headers.get('content-type'), 'image/png');
+  });
+
+  test('clean URLs like cleanUrls: /terms is terms.html, and .html paths redirect there with the query kept', async () => {
+    for (const page of ['terms', 'privacy', 'thanks']) {
+      const r = await fetch(`${base}/${page}`);
+      assert.equal(r.status, 200, page);
+      assert.equal(await r.text(), fs.readFileSync(path.join(parent, 'dist', `${page}.html`), 'utf8'));
+    }
+    const moved = await raw(`/thanks.html?session_id=${SESSION}`);
+    assert.equal(moved.status, 308);
+    assert.equal(moved.headers.location, `/thanks?session_id=${SESSION}`);
+    assert.equal((await raw('/index.html')).headers.location, '/');
+    assert.equal((await raw('/x/..//evil.html')).headers.location, '/evil', 'never a //host redirect');
+    assert.equal((await raw('/nope')).status, 404);
   });
 
   test("sends vercel.json's headers: the CSP everywhere, noindex only on the thanks page", async () => {
-    const home = await fetch(`${base}/index.html`);
+    const home = await fetch(`${base}/`);
     assert.match(home.headers.get('content-security-policy'), /default-src 'self'/);
     assert.equal(home.headers.get('referrer-policy'), 'no-referrer');
     assert.equal(home.headers.get('x-robots-tag'), null);
-    assert.equal((await fetch(`${base}/thanks.html`)).headers.get('x-robots-tag'), 'noindex');
+    assert.equal((await fetch(`${base}/thanks`)).headers.get('x-robots-tag'), 'noindex');
+    assert.equal((await fetch(`${base}/thanks.html`)).headers.get('x-robots-tag'), 'noindex', 'after the redirect');
   });
 
   test('404 for missing files and for any path outside the root; 405 for other methods', async () => {

@@ -4,14 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<title>overnight-receipts: what did your agent do overnight?</title>
-<meta name="description" content="Morning triage receipts for overnight Claude Code runs: one receipt per git branch, from the session logs already on your disk. Free, MIT, local and read-only.">
+{{HEAD}}
 <link rel="icon" href="favicon.svg">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="top">
-  <a class="brand" href="index.html">overnight-receipts</a>
+  <a class="brand" href="/">overnight-receipts</a>
   <nav><a href="#pro">Pro</a> <a href="{{REPO_URL}}">GitHub</a></nav>
 </header>
 <main>
@@ -19,7 +18,7 @@
     <div class="pitch">
       <h1>What did your agent do overnight?</h1>
       <p class="lede">One receipt per git branch, built from the Claude Code session logs already on your disk. Each says what the agent was asked, whether its last test run passed, how often it retried, which risky files it touched and what it left for you. Ranked worst first, with a <strong>merge</strong>, <strong>fix</strong> or <strong>kill</strong> suggestion.</p>
-      <pre class="cmd"><code>{{INSTALL}}</code></pre>
+      <pre class="cmd" data-activate="install"><code>{{INSTALL}}</code></pre>
       <p class="note">Free and MIT. Runs on your machine, read-only and offline. No hooks to install, no account, nothing uploaded.</p>
     </div>
     <pre class="terminal" aria-label="A sample run"><code>$ overnight-receipts --since 12h
@@ -47,7 +46,7 @@
     <h2>Pro: {{PRICE}} once</h2>
     <p>Everything on this page is free, and stays free. Pro is a supporter license for people it saves a morning or two; the money keeps the parser in step with each Claude Code release.</p>
     {{BUY}}
-    <p class="fine">One payment of {{PRICE}} through Stripe, no subscription. Refunds within 30 days, no questions asked. By buying you accept the <a href="terms.html">terms</a>. The <a href="privacy.html">privacy policy</a> says what's collected (very little).</p>
+    <p class="fine">One payment of {{PRICE}} through Stripe, no subscription. Refunds within 30 days, no questions asked. By buying you accept the <a href="/terms">terms</a>. The <a href="/privacy">privacy policy</a> says what's collected (very little).</p>
     <ul>
       <li>The one-line Pro link at the end of each <code>--out</code> Markdown file goes away.</li>
       <li>Nothing is locked: it's an honour system. After paying you get a license string for <code>{{LICENSE_ENV}}</code>, and the tool never checks it or sends it anywhere.</li>
@@ -65,7 +64,7 @@
   </section>
 </main>
 <footer class="foot">
-  <a href="terms.html">Terms</a> · <a href="privacy.html">Privacy</a> · <a href="{{REPO_URL}}">Source (MIT)</a>
+  <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="{{REPO_URL}}">Source (MIT)</a> · <a href="{{ISSUES_URL}}">Contact</a>
 </footer>
 </body>
 </html>

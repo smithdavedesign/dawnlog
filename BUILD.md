@@ -9,6 +9,12 @@ History:
 
 The [Plan](#plan) below is for this run's M3 pass, the storefront. The M2 pass plan, the M1 plan and the first M2/M3 notes are kept as written further down.
 
+**Go-live pass (2026-10-13), after the M3 pass.** It is described in [LAUNCH-READY.md](LAUNCH-READY.md), with its decisions and what's left for David. It changed four things the notes below describe:
+- **The checkout variable is now `STRIPE_PAYMENT_LINK`** (it was `PRO_CHECKOUT_URL`). It's renamed throughout this file, and the behaviour is unchanged.
+- **The site no longer says "no analytics".** It sends RepoHQ's visit beacon, and the privacy page describes it: three events, no cookie and no identifier.
+- **Clean URLs:** `vercel.json` has `cleanUrls`, so the pages are `/terms`, `/privacy` and `/thanks`, and the `noindex` header rule is on `/thanks`.
+- **Where checkout goes live:** the go-live brief puts the Payment Link in the Vercel env and `.provision` asks only for the Vercel project and the link. That reverses the Cloudflare-only decision below. The Hobby plan's non-commercial clause is still true, so LAUNCH-READY.md flags it for David.
+
 ## Plan
 
 **M3 pass of the MVP run (2026-10-13): the storefront.** This was planned non-interactively with gstack's Step 0, Architecture review and Test review. Nobody was available to answer questions, so each decision is written down here with its reason.
@@ -26,7 +32,7 @@ The [Plan](#plan) below is for this run's M3 pass, the storefront. The M2 pass p
    - **[Layer 1]** Vercel serves a static directory from `vercel.json` (`buildCommand`, `outputDirectory`, `headers`) on the free tier.
 2. **Minimum change set:**
    - `site/pages/`: four static pages (landing, terms, privacy, thanks), one stylesheet, and a browser module of about 20 lines for the license line.
-   - `site/build.js`: fills in the price, the license variable and the Buy button (from `PRO_CHECKOUT_URL`), then writes `dist/`.
+   - `site/build.js`: fills in the price, the license variable and the Buy button (from `STRIPE_PAYMENT_LINK`), then writes `dist/`.
    - `vercel.json`: the build command, the output directory and security headers.
    - `.provision`: the Vercel project, plus requests to David for the Payment Link and (added during the build, see the search check) a Cloudflare Pages project.
    - This run also requires screenshots: `scripts/screenshots.mjs`, `site/serve.js` (a local preview server the screenshots use), and `playwright-core` as a devDependency.
@@ -44,10 +50,10 @@ The [Plan](#plan) below is for this run's M3 pass, the storefront. The M2 pass p
    - **Found while writing the deploy notes: Vercel's free Hobby plan is "non-commercial personal use only".** Its fair-use guidelines count any deployment "used for the purpose of financial gain of anyone involved" as commercial, though asking for donations isn't. A $12 Stripe link qualifies, and Vercel Pro ($20/month) would break the $0 rule. **[Layer 1]** Cloudflare Pages' free plan allows commercial use (Cloudflare's self-serve agreement has no such restriction) and reads a `_headers` file from the output directory. **Decision:**
      - The build also writes `dist/_headers`, generated from `vercel.json`'s rules, so there's one source for the headers.
      - Vercel (`vercel project dawnlog`) hosts the pre-launch page and previews while checkout is off, so no money changes hands there.
-     - The live storefront with checkout goes on Cloudflare Pages: a `request` for David, and `PRO_CHECKOUT_URL` is set only there.
+     - The live storefront with checkout goes on Cloudflare Pages: a `request` for David, and `STRIPE_PAYMENT_LINK` is set only there.
      - Footgun: Pages serves `/thanks.html` at `/thanks`, so `_headers` gets both paths.
    - **[Layer 1]** No static site generator. Four pages and a `replace` that fails on an unknown placeholder are less code than configuring one. The build keeps 0 dependencies: Vercel's install only fetches playwright-core, which downloads no browser.
-   - **[EUREKA]** The checkout URL is the "start charging" switch. REVENUE says not to charge until attribution is at least 90% on David's own runs. The Buy button exists only when `PRO_CHECKOUT_URL` is set in Vercel's env. So the gate is a config step David takes after that check, not a code change. Until then the page says "Checkout opens soon", never a dead link.
+   - **[EUREKA]** The checkout URL is the "start charging" switch. REVENUE says not to charge until attribution is at least 90% on David's own runs. The Buy button exists only when `STRIPE_PAYMENT_LINK` is set in Vercel's env. So the gate is a config step David takes after that check, not a code change. Until then the page says "Checkout opens soon", never a dead link.
 5. **TODOS.md:** none exists. Follow-ups go to "What's left".
 6. **Completeness check:** the tests cover:
    - both checkout states, plus a set-but-invalid value (the build fails without echoing it)
@@ -76,7 +82,7 @@ The [Plan](#plan) below is for this run's M3 pass, the storefront. The M2 pass p
   - no cookies or analytics
   - it's an honour system, and how to get a lost license
 - **Thanks (`thanks.html?session_id=…`):** the license line `export OVERNIGHT_RECEIPTS_LICENSE="cs_…"`, or a fallback that says how to get it. The page is `noindex`.
-- **`PRO_CHECKOUT_URL`** (host env, on Cloudflare Pages only): only `https://buy.stripe.com/…` links are accepted.
+- **`STRIPE_PAYMENT_LINK`** (host env, on Cloudflare Pages only): only `https://buy.stripe.com/…` links are accepted.
 - **`vercel.json`** with security headers, the same headers as **`dist/_headers`** for Cloudflare Pages, and **`.provision`**.
 - **README `## Pro`:** describes the storefront. The live link is added at launch.
 
@@ -97,8 +103,8 @@ The [Plan](#plan) below is for this run's M3 pass, the storefront. The M2 pass p
  src/pro.js ────────┼─▶ site/build.js ─▶ dist/  ── Vercel (vercel.json): pre-launch, checkout off
    PRO_PRICE        │     {{PRICE}} {{LICENSE_ENV}} {{BUY}}  └ Cloudflare Pages (dist/_headers): live ─▶ index.html
    LICENSE_ENV      │     fails on an unknown placeholder       same headers: CSP default-src 'self',
- PRO_CHECKOUT_URL ──┘     and on a set-but-invalid URL;          no-referrer, nosniff       │ Buy (only if
-   (Pages env)            _headers generated from vercel.json                               │ PRO_CHECKOUT_URL)
+ STRIPE_PAYMENT_LINK ──┘     and on a set-but-invalid URL;          no-referrer, nosniff       │ Buy (only if
+   (Pages env)            _headers generated from vercel.json                               │ STRIPE_PAYMENT_LINK)
                                                                             ▼
                                              buy.stripe.com Payment Link (David's Stripe account)
                                                                             │ after payment: redirect to
@@ -124,15 +130,15 @@ The [Plan](#plan) below is for this run's M3 pass, the storefront. The M2 pass p
 
 | Codepath | Realistic failure | Handled by |
 |---|---|---|
-| `PRO_CHECKOUT_URL` unset (preview deploys, or before David's go-ahead) | A Buy button to nowhere | No link. The page says "Checkout opens soon" (test). |
-| `PRO_CHECKOUT_URL` mistyped (`http:`, a dashboard URL, a stray quote) | A broken or hostile Buy link goes live | The build fails, so Vercel keeps the last good deploy. The message names the variable, never its value (test). |
+| `STRIPE_PAYMENT_LINK` unset (preview deploys, or before David's go-ahead) | A Buy button to nowhere | No link. The page says "Checkout opens soon" (test). |
+| `STRIPE_PAYMENT_LINK` mistyped (`http:`, a dashboard URL, a stray quote) | A broken or hostile Buy link goes live | The build fails, so Vercel keeps the last good deploy. The message names the variable, never its value (test). |
 | Buyer closes the tab before the redirect (Stripe's own warning) | Paid, no license string | The terms and thanks page say to reply to the Stripe receipt. Any non-blank value works meanwhile (honour system). |
 | Thanks page opened without, or with a forged, `session_id` | Script injection, or a junk license | The regex rejects it, the fallback text shows, and nothing is injected (test with `<img onerror>` and quote payloads). |
 | A page edit adds an inline script or a CDN font | The CSP blocks it on Vercel, or the privacy promise breaks | A test fails on inline scripts and styles, `on*=` handlers and any other-origin `src` or `href` except the allowed links. |
 | A template edit leaves `{{SOMETHING}}` | Raw braces on the live page | The build throws on unknown placeholders, and a test checks that none survive. |
 | Preview server path traversal (`/..%2fpackage.json`) | Leaks repo files on localhost | Paths are resolved and checked to stay under the root, and NUL bytes are rejected (test). |
 | The host runs `npm install` | A browser download or install script runs | `playwright-core` downloads no browser and has no install script. |
-| Checkout switched on for the Vercel Hobby deploy | Breaks Vercel's non-commercial clause, and the project can be suspended | `PRO_CHECKOUT_URL` goes only to Cloudflare Pages (the `.provision` request says so). `_headers` gives that host the same CSP (test). |
+| Checkout switched on for the Vercel Hobby deploy | Breaks Vercel's non-commercial clause, and the project can be suspended | `STRIPE_PAYMENT_LINK` goes only to Cloudflare Pages (the `.provision` request says so). `_headers` gives that host the same CSP (test). |
 | A header added to `vercel.json` in a shape `serve.js` or `_headers` can't translate | It's missing locally or on Cloudflare Pages | The build throws on an untranslatable source, and a test pins `vercel.json` to the two supported shapes. |
 
 ### Test plan
@@ -178,7 +184,7 @@ Every transcript-derived line cites its transcript line.
 
 | Page | Shows |
 |---|---|
-| `index.html` | What it is, the free install line, a sample receipt, and the Pro box. The box holds the price from `PRO_PRICE` and the **Buy Pro · $12 once** button. That button links the Stripe Payment Link when `PRO_CHECKOUT_URL` is set; otherwise the box says "Checkout opens soon". Terms, privacy and the 30-day refund sit under the button. |
+| `index.html` | What it is, the free install line, a sample receipt, and the Pro box. The box holds the price from `PRO_PRICE` and the **Buy Pro · $12 once** button. That button links the Stripe Payment Link when `STRIPE_PAYMENT_LINK` is set; otherwise the box says "Checkout opens soon". Terms, privacy and the 30-day refund sit under the button. |
 | `terms.html` | What you buy, the honour system, payment by Stripe, 30-day refunds, a lost license, no warranty ("as is"), best-effort redaction, liability capped at the price. |
 | `privacy.html` | The tool: on your machine, read-only, nothing uploaded, no telemetry, and what `--summarize` sends. The site: no cookies, no analytics, Vercel or Cloudflare request logs. Stripe: what the maintainer sees, and that it's never sold. |
 | `thanks.html` | Where Stripe redirects after payment, with `?session_id={CHECKOUT_SESSION_ID}`. `license.js` checks the id and shows `export OVERNIGHT_RECEIPTS_LICENSE="cs_…"`. Without a valid id it shows how to get one (reply to the Stripe receipt). It's `noindex`, sends no referrer, and isn't cached. |
@@ -192,7 +198,7 @@ Every transcript-derived line cites its transcript line.
 
 A test runs steps 4 and 5 end to end, and the screenshots show steps 1, 3 and 4.
 
-**Can it take money yet?** The code is ready. Once the storefront is deployed with `PRO_CHECKOUT_URL`, buyers can pay and get their license string. Three things are missing, and none of them is code:
+**Can it take money yet?** The code is ready. Once the storefront is deployed with `STRIPE_PAYMENT_LINK`, buyers can pay and get their license string. Three things are missing, and none of them is code:
 - David's Stripe Payment Link (requested in `.provision`)
 - the Cloudflare Pages deploy (requested)
 - REVENUE.md's gate: at least 90% attribution on 10+ real runs before switching checkout on
@@ -204,16 +210,16 @@ The full list is in [What's left](#whats-left).
 Requires Node ≥ 22 and git. The CLI and the site build have no dependencies. `playwright-core` (a devDependency) is only for screenshots.
 
 ```sh
-npm test                                   # 265 tests (node:test), ~3 s
+npm test                                   # 290 tests (node:test), ~4 s
 npm run demo                               # the CLI on a fixture repo in a temp dir: terminal, Markdown (with footer), digest
 node bin/overnight-receipts.js --since 12h # in any repo you've run Claude Code in
 npm run site:build                         # dist/ with checkout off ("Checkout opens soon")
-PRO_CHECKOUT_URL=https://buy.stripe.com/<your link id> npm run site:build   # checkout on
+STRIPE_PAYMENT_LINK=https://buy.stripe.com/<your link id> npm run site:build   # checkout on
 npm run site:preview                       # build, then serve dist/ at http://127.0.0.1:4173/ with vercel.json's headers
 npm install && CHROMIUM_PATH=/path/to/chromium npm run screenshots          # regenerate docs/screenshots/ (never downloads a browser)
 ```
 
-Open `http://127.0.0.1:4173/thanks.html?session_id=cs_test_` followed by 16 or more letters and digits to see the license line. Any other value shows the fallback.
+Open `http://127.0.0.1:4173/thanks?session_id=cs_test_` followed by 16 or more letters and digits to see the license line. Any other value shows the fallback.
 
 ## Deploy (free tier)
 
@@ -223,29 +229,32 @@ Open `http://127.0.0.1:4173/thanks.html?session_id=cs_test_` followed by 16 or m
 
 **The storefront** is a static `dist/` and needs no server, database or secrets.
 
-1. **Pre-launch, on Vercel Hobby (free):** `.provision` creates the `dawnlog` project. Connect it to the repo. `vercel.json` sets the build command (`npm run site:build`), the output directory (`dist`), `framework: null` and the security headers. Every push deploys. Leave `PRO_CHECKOUT_URL` unset there, so the page says "Checkout opens soon".
+_Go-live pass: the current deploy steps are in [LAUNCH-READY.md](LAUNCH-READY.md). The `.provision` now asks for the Vercel project and the Payment Link only, and the link goes in the Vercel env as `STRIPE_PAYMENT_LINK`. The Cloudflare Pages route below still works (`dist/_headers`, plus `SITE_URL` for the canonical URLs) if David decides the Hobby clause rules Vercel out once checkout is on._
+
+1. **Pre-launch, on Vercel Hobby (free):** `.provision` creates the `dawnlog` project. Connect it to the repo. `vercel.json` sets the build command (`npm run site:build`), the output directory (`dist`), `framework: null` and the security headers. Every push deploys. Leave `STRIPE_PAYMENT_LINK` unset there, so the page says "Checkout opens soon".
 2. **Live, with checkout, on Cloudflare Pages (free plan, commercial use allowed).** This is requested in `.provision`.
-   - Connect the same repo: build command `npm run site:build`, output directory `dist`, env `NODE_VERSION=22` and `PRO_CHECKOUT_URL`.
+   - Connect the same repo: build command `npm run site:build`, output directory `dist`, env `NODE_VERSION=22` and `STRIPE_PAYMENT_LINK`.
    - The build writes `dist/_headers`, so Pages serves the same CSP, no-referrer, nosniff and `noindex` as Vercel.
    - The Stripe redirect goes to `https://<project>.pages.dev/thanks?session_id={CHECKOUT_SESSION_ID}`. Pages serves `thanks.html` at `/thanks`, so no redirect can drop the query string.
    - **Why not Vercel for this step:** Vercel's Hobby plan is non-commercial only, and Vercel Pro ($20/month) would break the $0 rule.
-3. **Switching checkout on or off** is one env var. Set `PRO_CHECKOUT_URL` and redeploy to open checkout; unset it to close. A malformed value fails the build, so the last good deploy stays up.
+3. **Switching checkout on or off** is one env var. Set `STRIPE_PAYMENT_LINK` and redeploy to open checkout; unset it to close. A malformed value fails the build, so the last good deploy stays up.
 
 ## Infrastructure
 
-Requested in `.provision`, one per line. Nothing in the tests needs any of it.
+Requested in `.provision`, one per line (rewritten in the go-live pass). Nothing in the tests needs any of it.
 
 | Line | For | Value the code reads |
 |---|---|---|
-| `vercel project dawnlog` | The pre-launch storefront and preview deploys (checkout off) | none. `PRO_CHECKOUT_URL` must **not** be set on this project. |
-| `request "Stripe Payment Link for dawnlog: …"` | The $12 one-time checkout, with the after-payment redirect to `/thanks?session_id={CHECKOUT_SESSION_ID}` | `PRO_CHECKOUT_URL` (a `https://buy.stripe.com/…` link, not a secret, but kept in env so switching checkout on is a config step) |
-| `request "Cloudflare Pages project for dawnlog: …"` | The live storefront once checkout is on | `PRO_CHECKOUT_URL`, `NODE_VERSION=22` |
+| `vercel project dawnlog` | The storefront, its previews, and Vercel's build-time variables | `VERCEL_ENV` (the beacon sends only on production) and `VERCEL_PROJECT_PRODUCTION_URL` (canonical URLs), both set by Vercel itself |
+| `request "Stripe payment link for dawnlog: $12 once, per REVENUE.md"` | The $12 one-time checkout, with the after-payment redirect to `/thanks?session_id={CHECKOUT_SESSION_ID}` | `STRIPE_PAYMENT_LINK` (a `https://buy.stripe.com/…` link, not a secret, but kept in env so switching checkout on is a config step) |
+
+The M3 pass also asked for a Cloudflare Pages project. The go-live `.provision` drops that request; see LAUNCH-READY.md › What's left.
 
 There's no database, no API key and no other secret. Stripe has no monthly fee, only a fee per sale (about $0.65 on $12, per REVENUE.md). There's no webhook, so no signing secret is needed.
 
 ## Exit criteria
 
-All pass: `npm test` gives 265 tests and 0 failures.
+All pass: `npm test` gives 290 tests and 0 failures (265 after the M3 pass, plus 25 in `test/launch.test.js` from the go-live pass).
 
 | Milestone | Criterion | Status | Test |
 |---|---|---|---|
@@ -255,7 +264,7 @@ All pass: `npm test` gives 265 tests and 0 failures.
 | M3.1–M3.3 | Only git without `--summarize`; digest written; Entire ingestion | ✅ | `m3.test.js` |
 | **M3 S1** | `npm run site:build` writes every page, links resolve, no placeholder left | ✅ | `storefront.test.js` › exit S1 (5 tests, including the output-dir guard and `render`) |
 | **M3 S2** | Landing: what it is, install line, price from `PRO_PRICE`, terms and privacy by the buy button | ✅ | › exit S2 (2 tests) |
-| **M3 S3** | `PRO_CHECKOUT_URL` on → Buy links the Payment Link; unset or blank → "opens soon", no Stripe link; invalid → the build fails without printing the value | ✅ | › exit S3 (5 tests: 8 invalid values, library and CLI) |
+| **M3 S3** | `STRIPE_PAYMENT_LINK` on → Buy links the Payment Link; unset or blank → "opens soon", no Stripe link; invalid → the build fails without printing the value | ✅ | › exit S3 (5 tests: 8 invalid values, library and CLI) |
 | **M3 S4** | Terms and privacy commitments; every page links both | ✅ | › exit S4 (3 tests) |
 | **M3 S5** | The thanks page turns a Checkout Session id into the license line; forged ids give none; that string hides the CLI footer | ✅ | › exit S5 (6 tests, including the end-to-end CLI run) |
 | **M3 S6** | Nothing from other origins, no inline code, no-referrer, a strict CSP in `vercel.json` and `_headers`, thanks is noindex, the site isn't in the npm package | ✅ | › exit S6 (5 tests) |
@@ -276,7 +285,7 @@ Screenshot proof, from `npm run screenshots` (each PNG was opened and checked):
    - It must charge exactly `PRO_PRICE` ($12). The pages read the price from `src/pro.js`, but Stripe's price is set in Stripe.
    - Redirect to `/thanks?session_id={CHECKOUT_SESSION_ID}`.
    - Try it once in test mode.
-4. **Cloudflare Pages project** (requested), with `PRO_CHECKOUT_URL` set there only.
+4. **Where checkout runs.** The go-live pass superseded this item: the Payment Link goes in the Vercel env, and the Hobby-plan question is item 2 of LAUNCH-READY.md › What's left.
 5. **Put the live URL in README `## Pro`** in place of "Checkout opens once the storefront is live".
 6. **Review the terms:** add the seller's legal name, a contact address, and governing law if wanted, and decide on Stripe Tax. These were left out rather than invented.
 7. **Bump the version** (still 0.3.0) when publishing.
@@ -315,7 +324,7 @@ This is a self-review of this pass's diff (`git status`, `git diff`) against gst
   - Fix: it refuses unless the directory is missing, empty or a previous build (`index.html` + `license.js`), and never touches the source pages. Tested, including that nothing is deleted on refusal.
 - [P1] (confidence: 8/10) **Hosting terms.** Taking money from a Vercel Hobby deploy breaks Vercel's non-commercial clause, and the project could be suspended mid-sale.
   - Fix: the build emits `dist/_headers` from `vercel.json`, so Cloudflare Pages' free plan (commercial use allowed) gets the same headers.
-  - `.provision` puts `PRO_CHECKOUT_URL` there only.
+  - `.provision` puts `STRIPE_PAYMENT_LINK` there only.
   - Tested: `_headers` matches `vercel.json` rule for rule.
 - [P2] (confidence: 7/10) **Stripe redirect.** Cloudflare Pages serves `thanks.html` at `/thanks`. A redirect URL ending in `.html` would depend on Pages keeping the query string through its own redirect.
   - Fix: the request names `/thanks?session_id=…`, and `_headers` covers both paths.
@@ -339,12 +348,12 @@ This is a self-review of this pass's diff (`git status`, `git diff`) against gst
   - The screenshot page escapes the CLI output.
 - **Secrets:**
   - Nothing credential-shaped is in any file. The stand-in Payment Link and session id are built at runtime.
-  - The build never prints `PRO_CHECKOUT_URL`, even when it's invalid (tested).
+  - The build never prints `STRIPE_PAYMENT_LINK`, even when it's invalid (tested).
   - The session id in the thanks URL is covered by `no-referrer` (header and meta), `noindex` and `no-store`, and it's never sent anywhere.
 - **Shell injection:** every spawn uses argument arrays, and the `.provision` lines contain no `$` or backticks.
 - **LLM trust boundary:** not touched.
 - **Enum and value completeness:**
-  - `PRO_CHECKOUT_URL` is read only in `site/build.js`.
+  - `STRIPE_PAYMENT_LINK` is read only in `site/build.js`.
   - `LICENSE_ENV` and `PRO_PRICE` reach the pages only through `{{…}}`. The tests compare them with `src/pro.js`.
   - Header rules flow from `vercel.json` to `serve.js` and `_headers`, which is pinned by a test.
 - **Offline CLI:** unchanged. The M3 network trap is still green.

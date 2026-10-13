@@ -3,24 +3,24 @@
 ## Screenshots
 
 ![The storefront's landing page on a desktop: the pitch, the free install line, a sample receipt and the Pro box with the Buy button](docs/screenshots/home-desktop.png)
-The storefront (`site/`, served locally by `site/serve.js` with `vercel.json`'s CSP) shows the install line and a sample receipt. With `PRO_CHECKOUT_URL` set (a stand-in test link here), the $12 Buy button and the terms and privacy links are above the fold.
+The production build of the storefront, served on localhost with `vercel.json`'s CSP, with `STRIPE_PAYMENT_LINK` set to a stand-in test link. The $12 Buy button is above the fold, and the page loads with no console error.
 
 ![The landing page on an iPhone 13](docs/screenshots/home-mobile.png)
 The same page on a phone: one column, and the install line wraps instead of running off the screen.
 
 ![The real CLI on the demo fixture: ranked terminal receipts on the left, the end of the --out Markdown file with its Pro footer on the right](docs/screenshots/receipts-desktop.png)
-`npm run demo` runs the real CLI on a fixture repo. Receipts are ranked FAILED first, the planted token shows as `[REDACTED]`, and the Markdown file ends with the Pro link.
+The core job, run for real: `npm run demo` runs the CLI on a fixture repo. Receipts are ranked FAILED first, the planted token shows as `[REDACTED]`, and the Markdown file ends with the Pro link.
 
 ![The same CLI run on a phone-sized page](docs/screenshots/receipts-mobile.png)
 The same real run, readable at phone width.
 
-![The thanks page after checkout: the license line built from the Checkout Session id](docs/screenshots/license-desktop.png)
-After payment, Stripe redirects to `thanks.html?session_id=…`. The page turns the (stand-in) session id into the `export OVERNIGHT_RECEIPTS_LICENSE="…"` line, which hides the footer.
+![The thanks page after checkout: the license line built from the Checkout Session id, and the footer's Terms, Privacy, Source and Contact links](docs/screenshots/license-desktop.png)
+After payment, Stripe redirects to `/thanks?session_id=…`. The page turns the (stand-in) session id into the `export OVERNIGHT_RECEIPTS_LICENSE="…"` line, which hides the footer. Every page's footer links Terms, Privacy, Source and Contact.
 
 ![The thanks page on an iPhone 13, with the long license string wrapped](docs/screenshots/license-mobile.png)
 On a phone the license string wraps, so all of it is visible to copy.
 
-_Made with `npm run screenshots` (Playwright and the system Chromium, sample data only)._
+_Made with `npm run screenshots` (Playwright and the system Chromium, sample data only). The run fails on any console error, CSP violation or beacon request (an automated browser must send none)._
 
 _Formerly **dawnlog**: renamed 2026-10-11 because the npm name `dawnlog` belongs to an unrelated tool. The old GitHub URL redirects here._
 
@@ -188,7 +188,7 @@ It's an honour system. Any non-blank value hides the line, and nothing is checke
 ## Development
 
 ```sh
-npm test        # 265 tests (node:test, no installs), ~4 s
+npm test        # 290 tests (node:test, no installs), ~4 s
 UPDATE_GOLDEN=1 node --test test/m2.test.js   # after an intended ranking change; review the diff of test/golden/ranking.txt
 npm run site:preview                          # build the storefront to dist/ and serve it on http://127.0.0.1:4173/
 npm install && CHROMIUM_PATH=/path/to/chromium npm run screenshots   # regenerate docs/screenshots/ (never downloads a browser)
@@ -210,9 +210,11 @@ npm install && CHROMIUM_PATH=/path/to/chromium npm run screenshots   # regenerat
 | `src/pro.js` | the Pro footer in the Markdown file, and the license variable that hides it |
 | `src/redact.js` | secret redaction and escape stripping |
 | `schema/receipts.schema.json` | the `--json` schema |
-| `site/pages/` | the storefront: landing, terms, privacy, thanks, stylesheet, `license.js` (session id → license line) |
-| `site/build.js` | `npm run site:build`: fills in the price and license variable from `src/pro.js` and the Buy button from `PRO_CHECKOUT_URL`, then writes `dist/` and `dist/_headers` (the same headers, for Cloudflare Pages) |
-| `site/serve.js` | local preview of `dist/` with `vercel.json`'s headers (127.0.0.1 only) |
-| `vercel.json` | Vercel build settings and security headers (CSP, no-referrer) |
+| `site/pages/` | the storefront: landing, terms, privacy, thanks, stylesheet, `license.js` (session id → license line), `beacon.js` (RepoHQ's visit / activate / checkout counter, described on the privacy page) |
+| `site/build.js` | `npm run site:build`: fills in the price and license variable from `src/pro.js` and the Buy button from `STRIPE_PAYMENT_LINK`, writes each public page's title, description, canonical URL, Open Graph, Twitter and JSON-LD tags, then writes `dist/` with `robots.txt`, `sitemap.xml`, `og.png` and `_headers` (the same headers, for Cloudflare Pages) |
+| `site/og-image.js` | the 1200×630 share image, drawn with code (a pixel font and a PNG encoder on `node:zlib`) |
+| `site/serve.js` | local preview of `dist/` with `vercel.json`'s headers and clean URLs (127.0.0.1 only) |
+| `vercel.json` | Vercel build settings, clean URLs (`/terms`, `/privacy`, `/thanks`) and security headers (CSP, no-referrer) |
+| `.provision` | what the pipeline asks the credential broker for: the Vercel project and the Stripe Payment Link |
 | `scripts/screenshots.mjs` | `npm run screenshots`: builds and serves the site, runs the demo, captures `docs/screenshots/` |
-| `test/` | fixture-driven tests: `cli` (M1), `m2`, `m3` and `storefront` exit criteria; unit tests per module; `perf` |
+| `test/` | fixture-driven tests: `cli` (M1), `m2`, `m3`, `storefront` and `launch` exit criteria; unit tests per module; `perf` |
